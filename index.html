@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#17181c">
+<meta name="color-scheme" content="dark">
+<title>10-Key Adding Machine</title>
+<!-- PWA: these files must exist next to index.html when hosted (see deployment notes).
+     Harmless 404s if you run this file directly from disk. -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* declaring dark color-scheme opts the page out of Chrome's auto-dark /
+   force-dark pass, which was darkening dialog text unpredictably */
+html{color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:#0d0e11;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+display:flex;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#app{width:100%;max-width:520px;height:100vh;height:100dvh;display:flex;flex-direction:column;
+background:linear-gradient(180deg,#262a31,#191b20);
+padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);overflow:hidden}
+header{position:relative;flex:none;display:flex;align-items:center;gap:3px;padding:8px 10px 4px}
+header h1{flex:1;margin:0;font-size:10px;font-weight:600;letter-spacing:.08em;color:#a9a496;text-transform:uppercase;text-align:center}
+.hgrp{display:flex;align-items:center;gap:3px;margin-left:auto}
+.hbtn{min-width:28px;height:28px;border:1px solid #3d434e;background:#2c3038;color:#cfcabd;border-radius:8px;font-size:12px;padding:0 4px;cursor:pointer}
+.hbtn:active{background:#3a4049}
+.hbtn svg{vertical-align:middle}
+@media (max-width:419px){header h1{display:none}}
+/* very narrow screens: shrink + wrap header buttons so nothing overflows */
+@media (max-width:359px){
+ header{gap:2px;padding:8px 8px 4px;flex-wrap:wrap}
+ .hgrp{gap:2px}
+ .hbtn{min-width:26px;height:26px;font-size:11px}}
+/* THE PAPER ROLL — takes all space left over after the fixed-size keypad,
+   which lands it at ~40–45% of the viewport on phones in portrait
+   (more on tall tablets — the roll is always the maximum available). */
+#tape{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+background:#f6f0e0;color:#2a2620;font-family:"Courier New",ui-monospace,Menlo,monospace;font-weight:700;font-size:15px;
+margin:0 12px;border-radius:12px;padding:10px 12px 16px;box-shadow:inset 0 4px 10px rgba(0,0,0,.4)}
+/* paper color themes (▤ cycles cream → white → green) */
+#tape.paper-w{background:#fbfaf5}
+#tape.paper-g{background:#e5eedd}
+.cap{text-align:center;font-size:12px;letter-spacing:.25em;color:#7a6f5c;padding-bottom:2px}
+.cap2{text-align:center;font-size:11px;color:#9a8f7a;border-bottom:1px solid #cfc4ab;padding-bottom:8px;margin-bottom:8px;font-family:-apple-system,sans-serif}
+.ln{display:flex;justify-content:flex-end;align-items:baseline;padding:1px 2px}
+.ln.nonadd{justify-content:flex-start}
+.ln .val{white-space:pre;font-variant-numeric:tabular-nums}
+.ln .op{width:1.4em;text-align:center;color:#6b6353}
+.ln .mark{color:#a63c2e;font-weight:800}
+/* item count beside S/T marks */
+.ln .cnt{min-width:2.4em;text-align:left;color:#8a7f6a;font-size:11px;font-family:-apple-system,sans-serif;font-weight:700;padding-left:2px}
+.ln.entry{cursor:pointer;-webkit-touch-callout:none}
+.ln.entry .lbl{flex:1;min-width:0;font-family:-apple-system,sans-serif;font-size:12.5px;font-weight:600;
+color:#7a6f5c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px;text-align:left}
+.ln.entry.neg{color:#a63c2e}
+.ln.sub.neg,.ln.tot.neg{color:#a63c2e}
+.ln.warn{background:#f6d3cc;border-radius:4px}
+.ln.sub{border-top:1px dashed #9a8f7a;margin-top:7px;padding-top:5px}
+.ln.tot{border-top:3px double #4a4438;margin-top:7px;padding-top:5px;font-size:16.5px}
+.ln.nonadd{color:#5c5443}
+.ln.nonadd .lbl{white-space:pre-wrap;word-break:break-all}
+.ln.nonadd.click{cursor:pointer}
+.ln.opnd{color:#5c5443;cursor:pointer}
+.hint{text-align:center;color:#a2977f;font-size:10.5px;font-family:-apple-system,sans-serif;font-weight:500;padding-top:14px}
+/* sticky mini-total (bottom-LEFT) shown while scrolled away from the roll's end;
+   shows the roll's last printed Total, or the running Σ if none yet */
+#stot{display:none;position:sticky;bottom:6px;margin:8px 0 0 2px;width:max-content;
+font-family:-apple-system,sans-serif;font-size:11px;font-weight:700;color:#5c5443;
+background:rgba(0,0,0,.10);border:1px solid rgba(0,0,0,.18);border-radius:10px;padding:2px 9px;pointer-events:none}
+#stot.show{display:block}
+#display{flex:none;padding:6px 14px 0;text-align:right}
+#noteTag{display:none;margin:0 0 4px auto;font-size:11px;color:#f0b45a;background:#2c3038;border:1px solid #3d434e;
+border-radius:10px;padding:2px 9px;max-width:100%;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#noteTag.show{display:block}
+/* display scales with screen height — never oversized on small phones */
+#cur{font-size:clamp(24px,4.4vh,34px);font-size:clamp(24px,4.4dvh,34px);font-weight:600;color:#f3efe2;
+font-variant-numeric:tabular-nums;line-height:1.2;min-height:1.25em}
+#cur.err{color:#ff7b66}
+#tot{font-size:clamp(11px,1.6vh,12.5px);font-size:clamp(11px,1.6dvh,12.5px);color:#a9a496;letter-spacing:.1em;
+padding:2px 0 7px;font-variant-numeric:tabular-nums}
+/* KEYPAD — fixed share of the viewport (clamp 240–400px) so the roll lands at
+   40–45% on phones. SIX equal 1fr rows: every key is exactly the same size;
+   the green + spans rows 3–4 (classic adding machine, unchanged since v1). */
+#keys{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(6,1fr);gap:7px;
+flex:0 0 auto;height:clamp(240px,41vh,400px);height:clamp(240px,41dvh,400px);
+padding:6px 12px calc(10px + env(safe-area-inset-bottom))}
+.k{min-height:24px;border:0;border-radius:10px;font-weight:600;
+font-size:clamp(15px,2.5vh,20px);font-size:clamp(15px,2.5dvh,20px);
+background:#f4f1ea;color:#1c1c1c;cursor:pointer;touch-action:manipulation;font-family:inherit;white-space:nowrap;
+box-shadow:0 2px 0 #b6b1a2,0 3px 6px rgba(0,0,0,.35)}
+/* .press mirrors :active — keys act on pointerdown, where :active may be suppressed */
+.k:active,.k.press{transform:translateY(2px);box-shadow:0 0 0 #b6b1a2}
+.k.op{background:#39404c;color:#f0b45a;box-shadow:0 2px 0 #1e232b,0 3px 6px rgba(0,0,0,.35)}
+.k.fn{background:#282c34;color:#cfc9bb;font-size:clamp(13px,2.2vh,18px);font-size:clamp(13px,2.2dvh,18px);box-shadow:0 2px 0 #121418,0 3px 6px rgba(0,0,0,.35)}
+.k.sub{background:#e0a23c;box-shadow:0 2px 0 #8f6614,0 3px 6px rgba(0,0,0,.35)}
+/* T: identical royal blue to C */
+.k.tot{background:#3572c9;color:#fff;box-shadow:0 2px 0 #1e4494,0 3px 6px rgba(0,0,0,.35)}
+.k.clr{background:#3572c9;color:#fff;box-shadow:0 2px 0 #1e4494,0 3px 6px rgba(0,0,0,.35)}
+/* + and − get their own bold colors so they stand out from every other key
+   (− uses the tape's deep negative-red, distinct from the brighter T) */
+.k.grn{background:#2f9e63;color:#fff;box-shadow:0 2px 0 #1d6b42,0 3px 6px rgba(0,0,0,.35)}
+.k.red{background:#b03328;color:#fff;box-shadow:0 2px 0 #701f18,0 3px 6px rgba(0,0,0,.35)}
+@media (orientation:landscape) and (max-height:540px){
+ #app{max-width:920px;display:grid;grid-template-columns:1.15fr 1fr;
+  grid-template-rows:auto 1fr auto;column-gap:12px;
+  grid-template-areas:"header header" "tape display" "tape keys"}
+ header{grid-area:header;padding:8px 12px 4px}
+ #tape{grid-area:tape;flex:none;min-height:0;margin:0 0 calc(8px + env(safe-area-inset-bottom)) 12px;
+  border-radius:12px;padding:10px 12px 14px}
+ #display{grid-area:display;align-self:end;padding:4px 18px 2px}
+ #cur{font-size:26px;min-height:32px;line-height:32px}
+ #tot{padding:1px 0 6px;font-size:11.5px}
+ #keys{grid-area:keys;align-self:end;gap:6px;height:auto;grid-template-rows:none;
+  padding:2px 14px calc(10px + env(safe-area-inset-bottom))}
+ .k{height:clamp(32px,8.5vh,46px);font-size:17px;border-radius:10px;
+  box-shadow:0 2px 0 #b6b1a2,0 4px 6px rgba(0,0,0,.4)}
+ .k.fn{font-size:15px}
+ /* the + key spans 2 rows — auto height so stretch fills both (fixed height
+    would collapse it to one row and leave a hole) */
+ .k.grn{height:auto}
+ .k:active,.k.press{transform:translateY(2px);box-shadow:0 0 0 #b6b1a2}
+}
+/* desktop / large tablet: two columns — the paper roll keeps ≥ half the page
+   and the keypad shrinks (vh-scaled) so it never crowds the tape */
+@media (min-width:640px) and (min-height:541px){
+ body{align-items:center;padding:16px}
+ #app{max-width:1080px;height:calc(100vh - 32px);height:calc(100dvh - 32px);
+  display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr) auto;column-gap:18px;
+  grid-template-areas:"header header" "tape display" "tape keys";
+  border-radius:20px;border:1px solid #333842;box-shadow:0 24px 64px rgba(0,0,0,.55)}
+ header{grid-area:header;padding:14px 16px 10px}
+ header h1{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
+ #tape{grid-area:tape;min-height:0;margin:0 0 16px 16px;font-size:16px}
+ #display{grid-area:display;align-self:end;padding:6px 16px 2px}
+ #cur{font-size:30px;min-height:36px;line-height:36px}
+ #tot{padding:2px 0 10px;font-size:12px}
+ #keys{grid-area:keys;gap:8px;height:auto;grid-template-rows:none;padding:4px 16px 16px}
+ .k{height:clamp(38px,6.2vh,50px);font-size:18px;border-radius:10px;
+  box-shadow:0 2px 0 #b6b1a2,0 4px 6px rgba(0,0,0,.4)}
+ .k.fn{font-size:16px}
+ /* same as landscape: + spans 2 rows, needs auto height to stretch */
+ .k.grn{height:auto}
+ .k:active,.k.press{transform:translateY(2px);box-shadow:0 0 0 #b6b1a2}
+}
+#toast{position:fixed;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);
+background:#000c;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:9;
+display:flex;align-items:center}
+#toast.show{opacity:1;pointer-events:auto}
+/* toast hosts an action button (UNDO / INSTALL / …) */
+#toastUndo{display:none;margin-left:10px;background:none;border:0;color:#7ec8ff;font-weight:700;font-size:12.5px;cursor:pointer;padding:0;font-family:inherit}
+.modalwrap{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:20;padding:20px}
+.modalwrap.open{display:flex}
+/* dialogs that can open with a text input anchor toward the TOP on touch devices,
+   so the on-screen keyboard (bottom ~40% of the screen) can never cover them.
+   (Desktop keeps its centered placement.) */
+@media (pointer:coarse){
+ #modal.open,#nmodal.open,#emodal.open,#rnmodal.open,#rmodal.open{align-items:flex-start;overflow-y:auto;
+  padding-top:calc(10px + env(safe-area-inset-top))}}
+/* explicit text color on .modal — force-dark heuristics behave best when both
+   background and text color are stated on every container */
+.modal{background:#262a31;color:#cfcabd;border:1px solid #3d434e;border-radius:16px;padding:16px 16px 14px;width:min(92vw,340px);
+box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.mtitle{color:#f3efe2;font-weight:600;font-size:15px}
+.msub{color:#a9a496;font-size:12px;margin:2px 0 10px}
+.mhint{color:#9aa7b3;font-size:11px;line-height:1.45;margin:2px 0 4px}
+.mlab{display:block;color:#a9a496;font-size:11px;margin:8px 0 3px}
+#fname,#ntext,#eAmt,#eNote,#rname,#rsearch{width:100%;height:40px;background:#191b20;border:1px solid #3d434e;border-radius:10px;color:#f3efe2;
+padding:0 10px;font-size:14px;font-family:inherit;user-select:text;-webkit-user-select:text}
+#fname:focus,#ntext:focus,#eAmt:focus,#eNote:focus,#rname:focus,#rsearch:focus{outline:1px solid #3572c9}
+.mbtn{display:flex;width:100%;height:44px;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;
+font-size:15px;font-weight:600;cursor:pointer;margin-top:9px;font-family:inherit}
+.mbtn:active{filter:brightness(1.18)}
+.mbtn.del{background:#d94f3d;color:#fff}
+.mbtn.save{background:#3572c9;color:#fff}
+.mbtn.imp{background:#39404c;color:#f0b45a}
+.mbtn.can{background:#2c3038;color:#cfcabd;border:1px solid #3d434e}
+.mbtn.mrg{background:#2f9e63;color:#fff}
+/* rolls manager */
+#rollList{max-height:46vh;overflow-y:auto;overscroll-behavior:contain;margin:2px 0 2px}
+.rcol{flex:1;min-width:0}
+.rname{color:#f3efe2;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rmeta{color:#a9a496;font-size:11px;margin-top:1px;font-family:-apple-system,sans-serif}
+.rhits{color:#7ec8ff;font-size:10.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rrow{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #3d434e;border-radius:10px;margin-top:7px;cursor:pointer}
+.rrow:active{background:#2c3038}
+.rrow.cur{border-color:#2f9e63}
+.ricn{width:30px;height:30px;border:1px solid #3d434e;background:#2c3038;color:#cfcabd;border-radius:8px;font-size:13px;cursor:pointer;flex:none;padding:0}
+.ricn:active{background:#3a4049}
+.hbody{max-height:58vh;overflow-y:auto;overscroll-behavior:contain;color:#dcd7ca;font-size:13px;line-height:1.5;
+padding-right:4px;user-select:text;-webkit-user-select:text}
+.hbody h3{margin:12px 0 4px;color:#f0b45a;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
+.hbody h3:first-child{margin-top:0}
+.hbody p{margin:4px 0}
+.hbody table{width:100%;border-collapse:collapse;margin:6px 0}
+.hbody td{padding:3px 6px;border-bottom:1px solid #333842;vertical-align:top;font-size:12.5px;color:#dcd7ca}
+.hbody td.kk{white-space:nowrap;color:#f6f2e8;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.hbody .ex{color:#a9a496;font-family:"Courier New",monospace;font-size:12px;background:#191b20;border-radius:6px;
+padding:6px 8px;margin:6px 0;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button class="hbtn" id="modeBtn" title="Decimal mode" aria-label="Decimal mode">2dp</button>
+    <h1>10-Key</h1>
+    <div class="hgrp">
+      <button class="hbtn" id="fsBtn" title="Full screen" aria-label="Full screen">⛶</button>
+      <button class="hbtn" id="sndBtn" title="Sound" aria-label="Sound on">🔊</button>
+      <button class="hbtn" id="hapBtn" title="Haptic feedback" aria-label="Haptics on">📳</button>
+      <button class="hbtn" id="paperBtn" title="Paper color (cream / white / green)" aria-label="Paper color">▤</button>
+      <button class="hbtn" id="noteBtn" title="Note — attach to next amount or print a label" aria-label="Note — attach to next amount or print a label">✎</button>
+      <button class="hbtn" id="copyBtn" title="Copy tape" aria-label="Copy tape">⧉</button>
+      <button class="hbtn" id="rollsBtn" title="Rolls" aria-label="Rolls">🗂</button>
+      <button class="hbtn" id="saveBtn" title="Save / export tape" aria-label="Save or export tape">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <path d="M17 21v-8H7v8"/>
+          <path d="M7 3v5h8"/>
+        </svg>
+      </button>
+      <button class="hbtn" id="helpBtn" title="Help" aria-label="Help">?</button>
+    </div>
+  </header>
+  <div id="tape">
+    <div class="cap">★ 10-KEY ★</div>
+    <div class="cap2" id="dateLine"></div>
+    <div id="lines"></div>
+    <div class="hint">Tap an entry twice to remove it · hold a line to edit · empty + or − repeats the last number · % then + or − posts it · # with no number stamps date &amp; time · ✎ attaches or prints a label · C clears the transaction — double-press empties the roll</div>
+    <div id="stot">T 0.00</div>
+  </div>
+  <div id="display">
+    <div id="noteTag" title="Tap to cancel the note">✎ <span id="noteTxt"></span> ✕</div>
+    <div id="cur" aria-live="polite">0</div>
+    <div id="tot" aria-live="polite">TOTAL 0.00</div>
+  </div>
+  <div id="keys">
+    <button class="k fn clr" data-a="C">C</button>
+    <button class="k fn" data-a="⌫">⌫</button>
+    <button class="k fn" data-a="#">#</button>
+    <button class="k fn" data-a="±">±</button>
+
+    <button class="k op" data-a="÷">÷</button>
+    <button class="k op" data-a="×">×</button>
+    <button class="k op" data-a="%">%</button>
+    <button class="k red" data-a="−">−</button>
+
+    <button class="k" data-a="7">7</button>
+    <button class="k" data-a="8">8</button>
+    <button class="k" data-a="9">9</button>
+    <button class="k grn" data-a="+" style="grid-row:span 2">+<br>=</button>
+
+    <button class="k" data-a="4">4</button>
+    <button class="k" data-a="5">5</button>
+    <button class="k" data-a="6">6</button>
+
+    <button class="k" data-a="1">1</button>
+    <button class="k" data-a="2">2</button>
+    <button class="k" data-a="3">3</button>
+    <button class="k sub" data-a="S">S</button>
+
+    <button class="k" data-a="0">0</button>
+    <button class="k" data-a="00">00</button>
+    <button class="k" data-a=".">•</button>
+    <button class="k tot" data-a="T">T</button>
+  </div>
+</div>
+<div id="toast"><span id="toastTxt"></span><button id="toastUndo">UNDO</button></div>
+<!-- save / export dialog -->
+<div id="modal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Save / export tape">
+    <div class="mtitle">Save / export tape</div>
+    <div class="msub" id="msub"></div>
+    <input id="fname" type="text" inputmode="text" autocomplete="off" aria-label="Backup file name" spellcheck="false">
+    <button class="mbtn save" id="mSave">💾  Save as JSON</button>
+    <button class="mbtn imp" id="mCsv">📄  Export CSV</button>
+    <button class="mbtn imp" id="mImp">📂  Import JSON</button>
+    <button class="mbtn can" id="mCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- merge/replace chooser -->
+<div id="mmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Import options">
+    <div class="mtitle">Import tape</div>
+    <div class="msub" id="imsub"></div>
+    <div class="mhint">Merge appends the file after the current roll · Replace clears the roll first, then loads the file</div>
+    <button class="mbtn mrg" id="mMrg">➕  Merge — append to roll</button>
+    <button class="mbtn del" id="mRep">↺  Replace — clear &amp; load</button>
+    <button class="mbtn can" id="mMCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- note dialog -->
+<div id="nmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Note">
+    <div class="mtitle">Note</div>
+    <div class="msub">Attach prints the text beside the next amount — e.g. Coffee … 3.00 + · Label prints it on its own line · empty Label prints a dotted divider</div>
+    <input id="ntext" type="text" inputmode="text" autocomplete="off" enterkeyhint="done" aria-label="Note text" maxlength="60" spellcheck="false" placeholder="Coffee, Taxi, Invoice #42 …">
+    <button class="mbtn save" id="nOk">✎  Attach to next amount</button>
+    <button class="mbtn imp" id="nPrint">⌗  Print label / divider</button>
+    <button class="mbtn can" id="nCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- line editor (long-press an amount line) -->
+<div id="emodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Edit line">
+    <div class="mtitle">Edit line</div>
+    <div class="msub">Long-press any amount line to open this editor · double-tap still removes</div>
+    <label class="mlab" for="eAmt">Amount</label>
+    <input id="eAmt" type="text" inputmode="decimal" autocomplete="off" aria-label="Amount" spellcheck="false">
+    <label class="mlab" for="eNote">Note (optional)</label>
+    <input id="eNote" type="text" inputmode="text" autocomplete="off" maxlength="60" aria-label="Note" spellcheck="false">
+    <button class="mbtn save" id="eOk">✓  Save changes</button>
+    <button class="mbtn can" id="eCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- rolls manager -->
+<div id="rmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Rolls">
+    <div class="mtitle">Rolls</div>
+    <div class="mhint">Tap a roll to switch · ✎ renames · 🗑 deletes · 🔍 search matches names, notes, # refs &amp; amounts. Each roll keeps its own tape and total.</div>
+    <input id="rsearch" type="text" inputmode="text" autocomplete="off" enterkeyhint="search" aria-label="Search rolls" spellcheck="false" placeholder="Search name, note, # ref, amount …">
+    <div id="rollList"></div>
+    <button class="mbtn mrg" id="rNew">➕  New roll</button>
+    <button class="mbtn can" id="rCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- rename roll -->
+<div id="rnmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Rename roll">
+    <div class="mtitle">Rename roll</div>
+    <input id="rname" type="text" inputmode="text" autocomplete="off" maxlength="40" aria-label="Roll name" spellcheck="false">
+    <button class="mbtn save" id="rnOk">✓  Rename</button>
+    <button class="mbtn can" id="rnCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- decimal mode picker -->
+<div id="dmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Decimal mode">
+    <div class="mtitle">Decimal mode</div>
+    <div class="mhint">How amounts are rounded &amp; printed. ADD mode: digits typed without • are hundredths — 123 becomes 1.23. Type • to override (123.45 stays 123.45). % rates are never scaled.</div>
+    <button class="mbtn can" data-mode="0" data-label="0dp — whole numbers only"></button>
+    <button class="mbtn can" data-mode="2" data-label="2dp — two decimals (standard)"></button>
+    <button class="mbtn can" data-mode="3" data-label="3dp — three decimals"></button>
+    <button class="mbtn can" data-mode="F" data-label="FLT — up to 6 decimals"></button>
+    <button class="mbtn imp" data-mode="A" data-label="ADD — cents-free entry: 123 ⇒ 1.23"></button>
+    <button class="mbtn can" id="dCan">✕  Cancel</button>
+  </div>
+</div>
+<!-- help dialog -->
+<div id="hmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Help">
+    <div class="mtitle">How to use the 10-Key</div>
+    <div class="hbody">
+      <h3>The basics</h3>
+      <p>Type an amount, then <b>+ =</b> to add it or <b>−</b> to subtract — every press prints on the paper roll. The line under the display is the running <b>TOTAL</b> since the last T. <b>S</b> prints a dashed subtotal; <b>T</b> prints the grand total (double line) and starts a new section. Both print the <b>item count</b> since the last T.</p>
+      <p>Scroll up a long roll and a small capsule appears at the bottom-left showing the roll’s <b>last printed Total</b> (or the running <b>Σ</b> if no T has been printed yet).</p>
+      <h3>The keys</h3>
+      <table>
+        <tr><td class="kk">0–9 · 00 · •</td><td>Enter amounts ( • is the decimal point)</td></tr>
+        <tr><td class="kk">+ =</td><td>Add (green key). With nothing typed, repeats the last amount</td></tr>
+        <tr><td class="kk">−</td><td>Subtract (red key). Empty too — repeats the last amount</td></tr>
+        <tr><td class="kk">× · ÷</td><td>Multiply / divide: type A, ×, type B, then + or − posts the result · chains (200 × 30 ÷ 5 +) keep one pending value</td></tr>
+        <tr><td class="kk">%</td><td>Percent of the total (or of a pending ×/÷). Held until + or − posts it</td></tr>
+        <tr><td class="kk">S · T</td><td>Subtotal · grand total (with item counts)</td></tr>
+        <tr><td class="kk">C</td><td>Start a <b>new transaction</b> — clears the running total, typed digits, pending ×/÷, held % and note · press <b>twice quickly</b> to empty the whole roll (other rolls are never affected)</td></tr>
+        <tr><td class="kk">⌫ · ±</td><td>Delete last digit · flip sign</td></tr>
+        <tr><td class="kk">#</td><td>With digits: reference label · empty: date &amp; time stamp</td></tr>
+        <tr><td class="kk">Hold a line</td><td>Edit its amount / note</td></tr>
+      </table>
+      <h3>Decimal modes</h3>
+      <p>Tap the mode button (top-left) to pick: <b>0dp</b>, <b>2dp</b>, <b>3dp</b>, <b>FLT</b> (up to 6 decimals), or <b>ADD</b> — cents-free entry: digits typed <i>without</i> • are hundredths, so <b>123 ⇒ 1.23</b> and <b>1 00 ⇒ 1.00</b>. Type • for exact decimals. % rates are never scaled.</p>
+      <h3>Notes &amp; references</h3>
+      <p><b>✎ (top bar)</b>: <b>Attach</b> prints the text beside the next amount (✎ “Coffee” … 3 + → <b>Coffee&nbsp;&nbsp;3.00&nbsp;+</b>); <b>Print label</b> puts text on its own line — leave the field empty to print a dotted <b>divider</b>.</p>
+      <p><b>#</b> with digits prints a reference line; empty stamps date &amp; time.</p>
+      <h3>Editing the tape</h3>
+      <p><b>Hold</b> an amount line (~½ second) to edit its amount or note. Tap-tap still removes a line. Dotted dividers and S/T lines are part of the paper itself — remove them with <b>UNDO</b>, <b>C</b> or double-<b>C</b>. Every removal, edit, merge, replace, transaction clear (C), roll empty (double-C) and roll delete shows an <b>UNDO</b> button in the toast.</p>
+      <h3>Rolls &amp; data</h3>
+      <p><b>🗂</b> manages <b>named rolls</b> — switch, create (➕), rename, delete, and <b>🔍 search</b>: the box matches roll names, notes, # references and amounts across all rolls, showing hit counts and snippets. Each row shows the roll’s <b>last total</b> (or its open running total). <b>⧉</b> copies the tape as text; <b>💾</b> opens <b>Save / export</b>: <b>Save as JSON</b> (backup/restore), <b>Export CSV</b> (spreadsheets — one row per line, signed amounts, op symbol on every line), or <b>Import</b> (Merge appends / Replace clears first). <b>C</b> starts a new transaction; <b>double-C</b> empties the current roll — saved rolls are never affected.</p>
+      <h3>Header buttons</h3>
+      <table>
+        <tr><td class="kk">0dp · 2dp · 3dp<br>FLT · ADD</td><td>Decimal mode picker (✓ marks current)</td></tr>
+        <tr><td class="kk">⛶</td><td>Full screen (auto on first tap on touch devices; exiting once turns auto off)</td></tr>
+        <tr><td class="kk">🔊 · 📳</td><td>Sound &amp; haptics (Android only for vibration)</td></tr>
+        <tr><td class="kk">▤</td><td>Paper color — cream / white / green</td></tr>
+        <tr><td class="kk">✎ · ⧉</td><td>Note · copy tape</td></tr>
+        <tr><td class="kk">🗂 · 💾 · ?</td><td>Rolls · save / export / import · help</td></tr>
+      </table>
+      <h3>Keyboard shortcuts</h3>
+      <table>
+        <tr><td class="kk">0–9 · .</td><td>Digits &amp; decimal point</td></tr>
+        <tr><td class="kk">+ / Enter / = / Space</td><td>Add</td></tr>
+        <tr><td class="kk">− · * or x · /</td><td>Subtract · multiply · divide</td></tr>
+        <tr><td class="kk">%</td><td>Percent</td></tr>
+        <tr><td class="kk">S · T</td><td>Subtotal · total</td></tr>
+        <tr><td class="kk"># · N</td><td>Reference / stamp · ± sign</td></tr>
+        <tr><td class="kk">C · Esc</td><td>New transaction (double-press empties the roll) · with a dialog open, Esc closes it</td></tr>
+        <tr><td class="kk">Backspace</td><td>⌫</td></tr>
+        <tr><td class="kk">? or H</td><td>This help</td></tr>
+      </table>
+      <h3>Sample calculations</h3>
+      <div class="ex">150 +  250 +  75 −  T    ⇒  325.00  T · 3</div>
+      <div class="ex">200 +  10 %  +          ⇒  220.00   (10% of 200 added)</div>
+      <div class="ex">80  +  25 %  −          ⇒   60.00   (25% discount)</div>
+      <div class="ex">25 ×  4  +              ⇒  100.00</div>
+      <div class="ex">200 ×  5 %  +           ⇒   10.00   (5% of 200, held for +)</div>
+      <div class="ex">100 ÷  4  +             ⇒   25.00</div>
+      <div class="ex">50  +  +                ⇒  prints 50 again</div>
+      <div class="ex">✎ “Coffee” … Attach … 3 +  ⇒  Coffee   3.00 +</div>
+      <div class="ex">✎ (empty) … Print       ⇒  dotted divider</div>
+      <div class="ex">ADD mode: 123 +         ⇒    1.23</div>
+      <h3>About</h3>
+      <p style="text-align:center;margin-top:10px">✦ Proudly created by <b>GLM 5.3 Flash</b><br>with instructions from <b>Hari</b> ✦</p>
+    </div>
+    <button class="mbtn can" id="hCan">✕  Close</button>
+  </div>
+</div>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const linesEl=$('#lines'),curEl=$('#cur'),totEl=$('#tot'),tapeEl=$('#tape'),sndBtn=$('#sndBtn'),hapBtn=$('#hapBtn');
+let tape=[],input='',negPending=false,mode='2',soundOn=true,hapticsOn=true,uid=1;
+let armedId=null,armedTimer=null;
+let pendOp=null,pendVal=0,pendLineId=null; /* pending ×/÷ operation */
+let pendPct=null; /* held % amount {amt,lineId} — posted by the next + or − */
+let fsAuto=true; /* auto-fullscreen on first tap (touch devices only) */
+let pendNote=''; /* note waiting to be attached to the next posted amount */
+/* named rolls + paper + undo stack */
+let rolls={},curRollId=null,undoStack=[],paper='';
+
+const MODES=['0','2','3','F','A'];
+const modeLabel=m=>m==='0'?'0dp':m==='3'?'3dp':m==='A'?'ADD':m==='F'?'FLT':'2dp';
+const round=n=>{
+ if(mode==='F')return Math.round(n*1e9)/1e9;
+ const d=mode==='0'?0:mode==='3'?3:2,m=Math.pow(10,d);
+ return Math.round((n+Number.EPSILON)*m)/m;};
+const fmt=n=>{
+ if(mode==='3')return n.toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3});
+ if(mode==='0')return n.toLocaleString(undefined,{maximumFractionDigits:0});
+ if(mode==='F')return n.toLocaleString(undefined,{maximumFractionDigits:6});
+ return n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
+/* signed format with typographic minus, e.g. −3.00 */
+const sfmt=n=>(n<0?'−':'')+fmt(Math.abs(n));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function curEntries(){const o=[];for(let i=tape.length-1;i>=0;i--){const l=tape[i];if(l.kind==='total')break;if(l.kind==='entry')o.unshift(l);}return o;}
+const runningTotal=()=>curEntries().reduce((s,l)=>round(s+l.value),0);
+function recompute(){let s=0;for(const l of tape){
+ if(l.kind==='entry')s=round(s+l.value);
+ else if(l.kind==='subtotal')l.value=s;
+ else if(l.kind==='total'){l.value=s;s=0;}}}
+/* total shown in dialogs — a completed T's value, else the running total */
+function rollTotal(){
+ for(let i=tape.length-1;i>=0;i--){
+  const l=tape[i];
+  if(l.kind==='entry')return runningTotal();
+  if(l.kind==='total')return l.value;
+ }
+ return runningTotal();}
+/* open running sum of a tape (entries after the last T) */
+function streamTotal(arr){let s=0;for(const l of arr){
+ if(l.kind==='entry')s=round(s+l.value);
+ else if(l.kind==='total')s=0;}return s;}
+/* last completed total in a tape, else its open running total */
+function tapeTotal(arr){
+ if(!arr.length)return{v:0,open:false};
+ for(let i=arr.length-1;i>=0;i--){
+  const l=arr[i];
+  if(l.kind==='entry')return{v:streamTotal(arr),open:true};
+  if(l.kind==='total')return{v:l.value,open:false};
+ }
+ return{v:streamTotal(arr),open:true};}
+/* ---- sound ---- */
+let AC=null;
+function ac(){if(!AC){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;AC=new C();}
+ if(AC.state==='suspended')AC.resume();return AC;}
+function blip(f,d,g,t){if(!soundOn)return;try{const a=ac();if(!a)return;
+ const o=a.createOscillator(),v=a.createGain();o.type=t||'square';o.frequency.value=f;
+ o.connect(v);v.connect(a.destination);const n=a.currentTime;
+ v.gain.setValueAtTime(g,n);v.gain.exponentialRampToValueAtTime(.0001,n+d);
+ o.start(n);o.stop(n+d+.02);}catch(e){}}
+/* 40ms strong buzz */
+function buzz(){if(!hapticsOn)return;try{navigator.vibrate&&navigator.vibrate(40);}catch(e){}}
+function keySound(a){
+ if(a==='+'||a==='−'||a==='×'||a==='÷')blip(950,.05,.05);
+ else if(a==='%')blip(850,.05,.05);
+ else if(a==='S'||a==='T')blip(760,.07,.055,'sawtooth');
+ else if('0123456789.'.indexOf(a)>-1||a==='00')blip(1500,.035,.04);
+ else blip(1200,.04,.04);}
+
+/* ---- fullscreen ---- */
+const fsBtn=$('#fsBtn'),fsRoot=document.documentElement;
+const coarsePtr=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+function isFs(){return !!(document.fullscreenElement||document.webkitFullscreenElement);}
+function fsReq(){const f=fsRoot.requestFullscreen||fsRoot.webkitRequestFullscreen;
+ if(f){try{const p=f.call(fsRoot);if(p&&p.catch)p.catch(()=>{});}catch(e){}}}
+function fsExit(){const f=document.exitFullscreen||document.webkitExitFullscreen;
+ if(f){try{f.call(document);}catch(e){}}}
+fsBtn.addEventListener('click',()=>{
+ if(isFs())fsExit();      /* fullscreenchange handler remembers the choice */
+ else{fsAuto=true;fsReq();}
+ buzz();});
+function fsChanged(){fsAuto=isFs();save();}
+document.addEventListener('fullscreenchange',fsChanged);
+document.addEventListener('webkitfullscreenchange',fsChanged);
+/* auto-enter fullscreen on the first user tap — touch devices only, and never
+   while a dialog is open (browsers require a gesture) */
+document.addEventListener('click',e=>{
+ if(fsAuto&&coarsePtr&&!isFs()&&!document.querySelector('.modalwrap.open')&&(!e.target||e.target.id!=='fsBtn'))fsReq();});
+/* keypad keys now act on pointerdown (no click event fires) — cover auto-fs too */
+document.addEventListener('pointerdown',e=>{
+ if(fsAuto&&coarsePtr&&!isFs()&&!document.querySelector('.modalwrap.open')&&(!e.target||e.target.id!=='fsBtn'))fsReq();});
+if(!(fsRoot.requestFullscreen||fsRoot.webkitRequestFullscreen))fsBtn.style.display='none';
+
+/* ---- undo ---- */
+/* snapshot lines by value so later in-place edits can't corrupt the undo state */
+function pushUndo(){undoStack.push({tape:tape.map(l=>Object.assign({},l)),uid:uid,roll:curRollId});if(undoStack.length>40)undoStack.shift();}
+function doUndo(){
+ const s=undoStack.pop();
+ if(!s){toast('Nothing to undo');return;}
+ tape=s.tape;uid=s.uid;
+ if(rolls[s.roll]){rolls[s.roll].tape=tape;rolls[s.roll].uid=uid;}
+ pendOp=null;pendVal=0;pendLineId=null;pendPct=null;
+ armedId=null;clearTimeout(armedTimer);
+ recompute();render();save();buzz();toast('Undone');}
+
+/* ---- actions ---- */
+function flash(){curEl.classList.add('err');setTimeout(()=>curEl.classList.remove('err'),260);blip(240,.09,.05,'sawtooth');}
+function digitLen(){return input.replace('.','').length;}
+function digit(d){
+ if(d==='.'){if(input.indexOf('.')>-1)return flash();input=input===''?'0.':input+'.';}
+ else if(d==='00'){if(input===''||input==='0')return flash();if(digitLen()>=9)return flash();input+='00';}
+ else{if(digitLen()>=10)return flash();input=(input==='0')?d:input+d;}
+ renderDisp();}
+/* ADD mode — digits typed without a decimal point are hundredths;
+   an explicit • overrides. % rates bypass this (typedRaw). */
+function typedVal(){const num=parseFloat(input);if(isNaN(num))return null;
+ return (mode==='A'&&input.indexOf('.')<0)?num/100:num;}
+function inputVal(){const v=typedVal();if(v===null)return null;
+ return round(v*(negPending?-1:1));}
+function typedRaw(){const num=parseFloat(input);if(isNaN(num))return null;return num;}
+/* entry factory — attaches a pending note, if any, to every posted amount */
+function entryObj(v){const o={id:uid++,kind:'entry',value:v};const n=takeNote();if(n)o.note=n;return o;}
+/* complete the pending ×/÷. sign applies to the posted result (A × B − ⇒ −A·B).
+   Used by + − S T; chaining in opKey folds silently instead of calling this. */
+function tryFinish(mark,sign){
+ const val=inputVal();if(val===null){flash();return null;}
+ if(pendOp==='÷'&&val===0){flash();return null;}
+ const r=pendOp==='×'?round(pendVal*val):round(pendVal/val);
+ tape.push({id:uid++,kind:'operand',op:mark,value:val});
+ tape.push(entryObj(round((sign||1)*r)));
+ pendOp=null;pendVal=0;pendLineId=null;input='';negPending=false;
+ return r;}
+function postPct(sign){
+ if(!pendPct)return false;
+ tape.push(entryObj(round(sign*pendPct.amt)));
+ pendPct=null;negPending=false;
+ return true;}
+/* adding-machine repeat — with nothing typed, + re-adds / − subtracts the last entry */
+function repeatKey(sign){
+ const es=curEntries();
+ if(!es.length)return flash();
+ const v=round(Math.abs(es[es.length-1].value));
+ tape.push(entryObj(round(sign*v)));
+ input='';negPending=false;afterChange(1);}
+function plusKey(){
+ let posted=false;
+ if(pendPct){posted=postPct(1);if(!posted)return;}
+ if(pendOp){if(tryFinish(pendOp,1)===null)return;afterChange(2);return;}
+ if(!input.length){if(posted)afterChange(1);else repeatKey(1);return;}
+ commit(1);}
+function minusKey(){
+ let posted=false;
+ if(pendPct){posted=postPct(-1);if(!posted)return;}
+ if(pendOp){if(tryFinish(pendOp,-1)===null)return;afterChange(2);return;}
+ if(!input.length){if(posted)afterChange(1);else repeatKey(-1);return;}
+ commit(-1);}
+/* × ÷ % — % computes rate% of the base and holds it; the next + or − posts it with that sign */
+function opKey(op){
+ if(pendOp){
+  if(op==='%'){
+   /* % on a ×/÷ chain = percent of the pending base, held for +/−
+      (e.g. 200×5% → 10.00, NOT 200×5=1000); rate is raw, never ADD-scaled */
+   const val=typedRaw();if(val===null)return flash();
+   const amt=round(Math.abs(pendVal)*Math.abs(val)/100);
+   if(!amt)return flash();
+   const l={id:uid++,kind:'operand',op:'%',value:val};
+   tape.push(l);pendPct={amt,lineId:l.id};
+   pendOp=null;pendVal=0;pendLineId=null;input='';negPending=false;
+   afterChange(1);return;}
+  /* chained ×/÷ — fold the intermediate into the pending value silently;
+     only the typed operand prints, and the final +/− posts ONE result */
+  const val=inputVal();if(val===null)return flash();
+  if(pendOp==='÷'&&val===0)return flash();
+  const l={id:uid++,kind:'operand',op:pendOp,value:val};
+  tape.push(l);pendLineId=l.id;
+  pendVal=pendOp==='×'?round(pendVal*val):round(pendVal/val);
+  pendOp=op;input='';negPending=false;
+  afterChange(1);return;}
+ const val=inputVal();if(val===null)return flash();
+ if(op==='%'){
+  /* standalone %: percent of the running total since the last T; held until + or −; raw rate */
+  const t=runningTotal(),val=typedRaw();
+  if(!t||val===null)return flash();
+  const amt=round(Math.abs(t)*Math.abs(val)/100);
+  if(!amt)return flash();
+  if(pendPct){pushUndo();tape=tape.filter(l=>l.id!==pendPct.lineId);} /* supersede an unposted rate (undoable) */
+  const l={id:uid++,kind:'operand',op:'%',value:val};
+  tape.push(l);pendPct={amt,lineId:l.id};
+  input='';negPending=false;afterChange();return;}
+ if(pendPct)pendPct=null; /* starting ×/÷ abandons an unposted % (line stays as reference) */
+ const l={id:uid++,kind:'operand',op,value:val};
+ tape.push(l);pendLineId=l.id;pendOp=op;pendVal=val;
+ input='';negPending=false;afterChange(1);}
+function commit(sign){
+ const v=typedVal();if(v===null)return flash();
+ tape.push(entryObj(round(v*(negPending?-1:sign))));
+ input='';negPending=false;afterChange(1);}
+function doSubtotal(){pendPct=null;negPending=false; /* don't leak sign into next entry */
+ if(pendOp&&tryFinish(pendOp,1)===null)return;
+ if(!curEntries().length)return flash();
+ tape.push({id:uid++,kind:'subtotal',value:0});afterChange();}
+function doTotal(){pendPct=null;negPending=false; /* don't leak sign into next entry */
+ if(pendOp&&tryFinish(pendOp,1)===null)return;
+ if(!curEntries().length)return flash();
+ tape.push({id:uid++,kind:'total',value:0});afterChange();}
+/* # after digits prints them as a reference label;
+   # with no digits stamps the current date & time */
+function stamp(){
+ const d=new Date(),p=n=>String(n).padStart(2,'0');
+ try{return d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'medium'});}
+ catch(e){return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());}}
+function doNonadd(){
+ if(pendOp)return flash(); /* visible cue — complete or C the pending ×/÷ first */
+ pendPct=null;
+ tape.push({id:uid++,kind:'nonadd',label:input.length?input:stamp()});
+ input='';negPending=false;afterChange(1);}
+/* C — single press: clear the running transaction and start a new one.
+   Double press (within ~½ s): empty the whole paper roll.
+   Neither touches other saved rolls — only the current tape changes. */
+let lastC=0;
+function ce(){
+ const now=Date.now();
+ if(now-lastC<450){lastC=0;clearRoll();return;}
+ lastC=now;
+ /* find where the current transaction starts (just after the last T) */
+ let cut=tape.length;
+ for(let i=tape.length-1;i>=0;i--){if(tape[i].kind==='total'){cut=i+1;break;}}
+ const hasOpen=cut<tape.length;
+ if(!input.length&&!negPending&&!pendOp&&!pendPct&&!pendNote&&!hasOpen){renderDisp();return;}
+ pushUndo();
+ input='';negPending=false;
+ if(pendOp){pendOp=null;pendVal=0;pendLineId=null;}
+ if(pendPct)pendPct=null;
+ if(pendNote){pendNote='';noteTagUpd();}
+ tape=tape.slice(0,cut); /* drop entries, subtotals & dangling lines since the last T */
+ armedId=null;clearTimeout(armedTimer);
+ afterChange();
+ toast('Transaction cleared',true);}
+function clearRoll(){
+ if(!tape.length&&!input.length&&!pendOp&&!pendPct&&!pendNote){toast('Roll is already empty');return;}
+ pushUndo();
+ tape=[];resetPending();
+ afterChange();
+ toast('Roll emptied',true);}
+function toggleSign(){
+ if(pendPct&&!input){flash();return;} /* a held % can't be negated — visible cue instead */
+ negPending=!negPending;renderDisp();}
+function back(){if(!input.length){negPending=false;renderDisp();return;}input=input.slice(0,-1);renderDisp();}
+/* n = number of lines purely APPENDED to the tape since the last render —
+   skips the full DOM rebuild so posting keys stay instant on long rolls.
+   render() self-checks: if the DOM is not exactly n lines behind, it
+   falls back to a full rebuild, so this is only ever a safe shortcut. */
+function afterChange(n){recompute();render(n);saveSoon();}
+function resetPending(){input='';negPending=false;
+ pendOp=null;pendVal=0;pendLineId=null;pendPct=null;
+ pendNote='';noteTagUpd();
+ armedId=null;clearTimeout(armedTimer);}
+
+/* ---- render ---- */
+/* make a tape line focusable & keyboard-activatable (Enter/Space = tap) */
+function kbd(d){d.tabIndex=0;
+ d.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();d.click();}});}
+/* lineEl takes the running item count for S/T lines */
+function lineEl(l,c){
+ const d=document.createElement('div');
+ if(l.kind==='entry'){
+  d.className='ln entry'+(l.value<0?' neg':'');
+  d.dataset.id=l.id;
+  /* optional note label sits on the left; amount stays beside its symbol */
+  d.innerHTML=(l.note?'<span class="lbl">'+esc(l.note)+'</span>':'')
+   +'<span class="val">'+esc(fmt(Math.abs(l.value)))+'</span><span class="op">'+(l.value<0?'−':'+')+'</span>';
+  /* long-press opens the line editor (tolerates small finger jitter) */
+  let lpT=null,lpFired=false,lx=0,ly=0;
+  d.addEventListener('pointerdown',e=>{lx=e.clientX;ly=e.clientY;lpFired=false;
+   lpT=setTimeout(()=>{lpFired=true;openEdit(l.id);},450);});
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>d.addEventListener(ev,()=>clearTimeout(lpT)));
+  d.addEventListener('pointermove',e=>{if(Math.hypot(e.clientX-lx,e.clientY-ly)>10)clearTimeout(lpT);});
+  d.addEventListener('contextmenu',e=>e.preventDefault());
+  d.addEventListener('click',()=>{if(lpFired){lpFired=false;return;}tapLine(l.id,d);});
+  kbd(d);
+ }else if(l.kind==='operand'){
+  d.className='ln opnd';d.dataset.id=l.id;
+  /* % lines print the raw rate, not currency-formatted */
+  const vs=l.op==='%'?String(l.value):(l.value<0?'−':'')+fmt(Math.abs(l.value));
+  d.innerHTML='<span class="val">'+esc(vs)+'</span><span class="op">'+esc(l.op)+'</span>';
+  d.addEventListener('click',()=>tapLine(l.id,d));
+  kbd(d);
+ }else if(l.kind==='nonadd'){
+  d.className='ln nonadd'+(l.label?' click':'');
+  d.innerHTML='<span class="lbl">'+(l.label?'# '+esc(l.label):'· · · · · · · · · · · ·')+'</span>';
+  if(l.label){d.dataset.id=l.id;d.addEventListener('click',()=>tapLine(l.id,d));kbd(d);}
+ }else if(l.kind==='subtotal'){
+  d.className='ln sub'+(l.value<0?' neg':'');
+  d.innerHTML='<span class="val">'+esc(sfmt(l.value))+'</span><span class="op mark">S</span>'+(c!=null?'<span class="cnt">'+c+'</span>':'');
+ }else{
+  d.className='ln tot'+(l.value<0?' neg':'');
+  d.innerHTML='<span class="val">'+esc(sfmt(l.value))+'</span><span class="op mark">T</span>'+(c!=null?'<span class="cnt">'+c+'</span>':'');
+ }
+ if(l.id===armedId)d.classList.add('warn');
+ return d;}
+/* display-only update — digit/backspace/± don't rebuild the whole tape DOM */
+function renderDisp(){
+ curEl.textContent=pendOp&&!input
+  ?(pendVal<0?'−':'')+fmt(Math.abs(pendVal))+' '+pendOp+(negPending?' −':'')
+  :pendPct&&!input
+  ?fmt(pendPct.amt)
+  :input!==''
+  ?(mode==='A'&&input.indexOf('.')<0
+     ?(negPending?'−':'')+fmt(parseInt(input,10)/100)
+     :(negPending?'−':'')+input)
+  :negPending?'−':sfmt(runningTotal());
+ totEl.textContent='TOTAL  '+sfmt(runningTotal());}
+function render(n){
+ renderDisp();
+ if(n>0&&linesEl.children.length===tape.length-n){
+  /* fast path — the n new lines were purely appended, just add them */
+  for(let i=tape.length-n;i<tape.length;i++)linesEl.appendChild(lineEl(tape[i]));
+ }else{
+  /* full rebuild (batched in a fragment — one layout instead of many) */
+  const frag=document.createDocumentFragment();
+  let cnt=0; /* entries since last T */
+  tape.forEach(l=>{
+   if(l.kind==='entry'){cnt++;frag.appendChild(lineEl(l));}
+   else if(l.kind==='subtotal'){frag.appendChild(lineEl(l,cnt));}
+   else if(l.kind==='total'){frag.appendChild(lineEl(l,cnt));cnt=0;}
+   else frag.appendChild(lineEl(l));
+  });
+  linesEl.innerHTML='';
+  linesEl.appendChild(frag);
+ }
+ tapeEl.scrollTop=tapeEl.scrollHeight;
+ updStot();}
+/* sticky mini-total: visible while scrolled away from the roll's end;
+   shows the roll's LAST printed Total (T), or the running Σ if no T yet */
+function updStot(){
+ const far=tapeEl.scrollHeight-tapeEl.scrollTop-tapeEl.clientHeight>60;
+ const el=$('#stot');
+ el.classList.toggle('show',far);
+ if(!far)return;
+ let v=0,found=false;
+ for(let i=tape.length-1;i>=0;i--){if(tape[i].kind==='total'){v=tape[i].value;found=true;break;}}
+ if(!found)v=streamTotal(tape);
+ el.textContent=(found?'T  ':'Σ  ')+sfmt(v);}
+tapeEl.addEventListener('scroll',updStot,{passive:true});
+function tapLine(id,el){
+ if(armedId===id){
+  pushUndo();
+  tape=tape.filter(l=>l.id!==id);
+  if(pendLineId===id){pendOp=null;pendVal=0;pendLineId=null;}
+  if(pendPct&&pendPct.lineId===id)pendPct=null;
+  armedId=null;clearTimeout(armedTimer);
+  afterChange();blip(500,.06,.05,'triangle');toast('Line removed',true);
+ }else{
+  document.querySelectorAll('.ln.warn').forEach(x=>x.classList.remove('warn'));
+  armedId=id;el.classList.add('warn');
+  clearTimeout(armedTimer);armedTimer=setTimeout(()=>{armedId=null;
+   document.querySelectorAll('.ln.warn').forEach(x=>x.classList.remove('warn'));},2200);}}
+
+/* ---- copy / toast ---- */
+let toastT=null,toastUndoFn=null;
+/* toast(m, undo) → action button pops the tape undo stack;
+   toast(m, true, fn) → custom one-shot action (roll delete, PWA install);
+   label overrides the button text (e.g. INSTALL) */
+function toast(m,undo,fn,label){const t=$('#toast');$('#toastTxt').textContent=m;
+ toastUndoFn=undo?(typeof fn==='function'?fn:doUndo):null;
+ $('#toastUndo').style.display=undo?'':'none';
+ $('#toastUndo').textContent=(undo&&typeof label==='string')?label:'UNDO';
+ t.classList.add('show');
+ clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),undo?6000:1500);}
+ $('#toastUndo').addEventListener('click',()=>{
+ $('#toast').classList.remove('show');
+ const f=toastUndoFn;toastUndoFn=null;if(f)f();});
+function tapeText(){const out=[];let cnt=0;
+ tape.forEach(l=>{
+  if(l.kind==='entry'){cnt++;out.push((l.note?l.note+'  ':'')+fmt(Math.abs(l.value))+'  '+(l.value<0?'-':'+'));}
+  else if(l.kind==='operand')out.push((l.op==='%'?String(l.value):(l.value<0?'-':'')+fmt(Math.abs(l.value)))+'  '+l.op);
+  else if(l.kind==='nonadd')out.push(l.label?'# '+l.label:'----------------');
+  else if(l.kind==='subtotal')out.push('---------------\n'+(l.value<0?'-':'')+fmt(Math.abs(l.value))+'  S · '+cnt+' items');
+  else{out.push('===============\n'+(l.value<0?'-':'')+fmt(Math.abs(l.value))+'  T · '+cnt+' items');cnt=0;}});
+ return out.join('\n');}
+function fallbackCopy(t){const ta=document.createElement('textarea');ta.value=t;
+ ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+ try{document.execCommand('copy');toast('Tape copied');}catch(e){toast('Copy failed');}
+ document.body.removeChild(ta);}
+function copyTape(){const txt=tapeText();
+ if(navigator.clipboard&&navigator.clipboard.writeText)
+  navigator.clipboard.writeText(txt).then(()=>toast('Tape copied'),()=>fallbackCopy(txt));
+ else fallbackCopy(txt);}
+
+/* ---- dialogs ---- */
+const modal=$('#modal'),mmodal=$('#mmodal'),nmodal=$('#nmodal'),hmodal=$('#hmodal'),dmodal=$('#dmodal'),
+      rmodal=$('#rmodal'),emodal=$('#emodal'),rnmodal=$('#rnmodal');
+const ALLMODALS=[modal,mmodal,nmodal,hmodal,dmodal,rmodal,emodal,rnmodal];
+const fname=$('#fname'),fileIn=$('#fileIn'),ntext=$('#ntext'),eAmt=$('#eAmt'),eNote=$('#eNote'),rname=$('#rname');
+const noteTag=$('#noteTag'),noteTxt=$('#noteTxt');
+let impLines=null,impParsed=null,impName='',editId=null,renameId=null;
+function noteTagUpd(){if(pendNote){noteTxt.textContent=pendNote;noteTag.classList.add('show');}else noteTag.classList.remove('show');}
+function takeNote(){const n=pendNote;pendNote='';noteTagUpd();return n;}
+function defaultName(){
+ const d=new Date(),p=n=>String(n).padStart(2,'0');
+ return 'tape-'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())
+       +'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+'.json';}
+function sanitizeName(s){
+ s=(s||'').trim().replace(/[\\/:*?"<>|]/g,'-');
+ if(!s)return '';
+ if(!/\.json$/i.test(s))s+='.json';
+ return s;}
+function openModal(){
+ $('#msub').textContent=tape.length+' lines · TOTAL '+sfmt(rollTotal());
+ fname.value=defaultName();
+ modal.classList.add('open');
+ setTimeout(()=>{fname.focus();fname.select();},60);}
+ALLMODALS.forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+ $('#mSave').addEventListener('click',()=>{
+ const name=sanitizeName(fname.value)||defaultName();
+ /* tape data + mode only — device prefs (sound/haptics/fullscreen) stay local */
+ const data=JSON.stringify({app:'tenkey',version:1,roll:rolls[curRollId]&&rolls[curRollId].name,tape,uid,mode},null,2);
+ const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+ const a=document.createElement('a');
+ a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),2000);
+ modal.classList.remove('open');toast('Saved '+name);});
+/* CSV export — one row per printed line, signed amounts, op symbol on every line
+   (entries get + / − by sign, operands keep × ÷ %, subtotal S, total T) */
+ $('#mCsv').addEventListener('click',()=>{
+ if(!tape.length){toast('Tape is empty');return;}
+ const dec=mode==='0'?0:mode==='3'?3:mode==='F'?6:2;
+ /* defuse Excel formula injection: prefix dangerous leading chars with ' */
+ const q=s=>{s=String(s);
+  if(/^[=+\-@\t\r]/.test(s))s="'"+s;
+  return '"'+s.replace(/"/g,'""')+'"';};
+ const rows=['line,type,description,amount,op'];
+ let i=0,cnt=0;
+ tape.forEach(l=>{
+  i++;
+  if(l.kind==='entry'){cnt++;
+   rows.push([i,'entry',q(l.note||''),l.value.toFixed(dec),q(l.value<0?'-':'+')].join(','));}
+  else if(l.kind==='operand'){rows.push([i,'operand',q(''),l.value.toFixed(dec),q(l.op)].join(','));}
+  else if(l.kind==='nonadd'){rows.push([i,'note',q(l.label||''),'',''].join(','));}
+  else if(l.kind==='subtotal'){rows.push([i,'subtotal',q(cnt+' items'),l.value.toFixed(dec),'S'].join(','));}
+  else{rows.push([i,'total',q(cnt+' items'),l.value.toFixed(dec),'T'].join(','));cnt=0;}});
+ const csv='\uFEFF'+rows.join('\r\n');
+ let base=(fname.value||'').trim().replace(/[\\/:*?"<>|]/g,'-');
+ if(!base)base=defaultName();
+ base=base.replace(/\.(json|csv)$/i,'');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+ const a=document.createElement('a');a.href=url;a.download=base+'.csv';
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),2000);
+ modal.classList.remove('open');toast('Saved '+base+'.csv');});
+ $('#mImp').addEventListener('click',()=>fileIn.click());
+ $('#mCan').addEventListener('click',()=>{modal.classList.remove('open');buzz();});
+/* merge/replace actions */
+ $('#mMrg').addEventListener('click',()=>{
+ if(!impLines)return;
+ pushUndo();
+ while(tape.length&&tape[tape.length-1].kind==='operand')tape.pop(); /* drop dangling op first */
+ if(tape.length)tape.push({id:uid++,kind:'nonadd',label:''}); /* dotted divider between rolls */
+ for(const l of impLines)tape.push(Object.assign({id:uid++},l));
+ resetPending();mmodal.classList.remove('open');
+ afterChange();buzz();toast('Merged '+impLines.length+' lines',true);});
+ $('#mRep').addEventListener('click',()=>{
+ if(!impLines)return;
+ pushUndo();
+ tape=impLines.slice();
+ uid=1;tape.forEach(l=>l.id=uid++);
+ const d=impParsed;
+ if(d&&typeof d.uid==='number'&&isFinite(d.uid)&&d.uid>uid)uid=d.uid;
+ if(d&&MODES.includes(d.mode)){mode=d.mode;$('#modeBtn').textContent=modeLabel(mode);}
+ resetPending();mmodal.classList.remove('open');
+ afterChange();buzz();toast('Imported '+tape.length+' lines',true);});
+ $('#mMCan').addEventListener('click',()=>{mmodal.classList.remove('open');buzz();});
+fileIn.addEventListener('change',()=>{
+ const f=fileIn.files&&fileIn.files[0];fileIn.value='';
+ if(!f)return;
+ const r=new FileReader();
+ r.onload=()=>{
+  try{
+   const d=JSON.parse(r.result);
+   impLines=normalizeTape(d); /* validate first, then ask merge/replace */
+   impParsed=d;
+   impName=(f.name||'tape.json').replace(/\.json$/i,'');
+   modal.classList.remove('open');
+   $('#imsub').textContent=impName+' · '+impLines.length+' lines · TOTAL '+sfmt(streamTotal(impLines));
+   mmodal.classList.add('open');
+   setTimeout(()=>$('#mMrg').focus(),60);
+  }catch(e){modal.classList.remove('open');toast('Import failed: not a valid tape file');}};
+ r.readAsText(f);});
+/* note button + dialog — attach OR print standalone/divider */
+ $('#noteBtn').addEventListener('click',()=>{buzz();
+ nmodal.classList.add('open');
+ setTimeout(()=>{ntext.focus();ntext.select();},60);});
+ $('#nOk').addEventListener('click',()=>{
+ const t=ntext.value.trim().slice(0,60);
+ nmodal.classList.remove('open');ntext.value='';
+ if(!t){pendNote='';noteTagUpd();return;}
+ pendNote=t;noteTagUpd();buzz();toast('Note “'+t+'” — attaches to the next amount');});
+/* empty label = dotted divider (paper feed) */
+ $('#nPrint').addEventListener('click',()=>{
+ const t=ntext.value.trim().slice(0,60);
+ nmodal.classList.remove('open');ntext.value='';
+ tape.push({id:uid++,kind:'nonadd',label:t});
+ afterChange(1);buzz();toast(t?'Label “'+t+'” printed':'Divider printed');});
+ $('#nCan').addEventListener('click',()=>{nmodal.classList.remove('open');ntext.value='';buzz();});
+ntext.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#nOk').click();}});
+noteTag.addEventListener('click',()=>{pendNote='';noteTagUpd();toast('Note cancelled');buzz();});
+function openHelp(){buzz();hmodal.classList.add('open');setTimeout(()=>$('#hCan').focus(),60);}
+ $('#helpBtn').addEventListener('click',openHelp);
+ $('#hCan').addEventListener('click',()=>{hmodal.classList.remove('open');buzz();});
+/* line editor */
+function openEdit(id){
+ const l=tape.find(x=>x.id===id);
+ if(!l||l.kind!=='entry')return;
+ editId=id;
+ eAmt.value=String(l.value);
+ eNote.value=l.note||'';
+ emodal.classList.add('open');
+ setTimeout(()=>{eAmt.focus();eAmt.select();},60);}
+ $('#eOk').addEventListener('click',()=>{
+ const l=tape.find(x=>x.id===editId);
+ if(!l){emodal.classList.remove('open');return;}
+ const num=parseFloat(eAmt.value.replace(',','.'));
+ if(!isFinite(num)){toast('Enter a valid amount');return;}
+ pushUndo();
+ l.value=round(num);
+ const nt=eNote.value.trim().slice(0,60);
+ if(nt)l.note=nt;else delete l.note;
+ emodal.classList.remove('open');
+ afterChange();buzz();toast('Line updated',true);});
+ $('#eCan').addEventListener('click',()=>{emodal.classList.remove('open');buzz();});
+[eAmt,eNote].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#eOk').click();}}));
+/* rolls manager — each row shows the roll's last total (or open running total).
+   The search box filters by roll NAME or by TAPE CONTENT: entry notes,
+   # reference labels and amounts (raw, digits-only or formatted). */
+function openRolls(){$('#rsearch').value='';renderRolls();rmodal.classList.add('open');setTimeout(()=>$('#rsearch').focus(),60);buzz();}
+function renderRolls(){
+ const list=$('#rollList');list.innerHTML='';
+ const raw=($('#rsearch').value||'').trim();
+ const q=raw.toLowerCase();
+ let shown=0;
+ Object.keys(rolls).forEach(id=>{
+  const r=rolls[id];
+  let nameHit=false,hits=[];
+  if(q){
+   if(r.name.toLowerCase().indexOf(q)>-1)nameHit=true;
+   else for(const l of r.tape){
+    if(l.kind==='entry'&&l.note&&l.note.toLowerCase().indexOf(q)>-1){hits.push(l.note);continue;}
+    if(l.kind==='nonadd'&&l.label&&l.label.toLowerCase().indexOf(q)>-1){hits.push('# '+l.label);continue;}
+    const v=(l.kind==='entry'||l.kind==='operand'||l.kind==='subtotal'||l.kind==='total')?l.value:null;
+    if(v!=null&&(String(v).indexOf(raw)>-1||(Math.abs(v)+'').indexOf(raw)>-1||fmt(Math.abs(v)).indexOf(raw)>-1))
+     hits.push(fmt(Math.abs(v)));
+   }
+   if(!nameHit&&!hits.length)return;
+  }
+  shown++;
+  const row=document.createElement('div');
+  row.className='rrow'+(id===curRollId?' cur':'');
+  const col=document.createElement('div');col.className='rcol';
+  const tt=tapeTotal(r.tape);
+  let meta='<div class="rmeta">'+r.tape.length+' lines · '+(tt.open?'RUNNING ':'TOTAL ')+sfmt(tt.v)
+   +(q&&hits.length?' · '+hits.length+(hits.length===1?' hit':' hits'):'')+'</div>';
+  if(q&&hits.length)
+   meta+='<div class="rmeta rhits">↳ '+esc(hits.slice(0,3).join(' · '))+(hits.length>3?' …':'')+'</div>';
+  col.innerHTML='<div class="rname">'+(id===curRollId?'✓ ':'')+esc(r.name)+'</div>'+meta;
+  const ren=document.createElement('button');ren.className='ricn';ren.textContent='✎';ren.title='Rename';ren.setAttribute('aria-label','Rename '+r.name);
+  ren.addEventListener('click',ev=>{ev.stopPropagation();openRename(id);});
+  const del=document.createElement('button');del.className='ricn';del.textContent='🗑';del.title='Delete';del.setAttribute('aria-label','Delete '+r.name);
+  del.addEventListener('click',ev=>{ev.stopPropagation();deleteRoll(id);});
+  row.appendChild(col);row.appendChild(ren);row.appendChild(del);
+  row.addEventListener('click',()=>{
+   if(id!==curRollId){switchRoll(id);rmodal.classList.remove('open');toast('Switched to '+rolls[id].name);}
+   buzz();});
+  list.appendChild(row);});
+ if(!shown){
+  const empty=document.createElement('div');
+  empty.className='rmeta';empty.style.padding='10px 2px';
+  empty.textContent='No rolls match “'+raw+'”';
+  list.appendChild(empty);}
+}
+ $('#rsearch').addEventListener('input',renderRolls);
+function switchRoll(id){
+ if(id===curRollId||!rolls[id])return;
+ save(); /* sync current roll first */
+ curRollId=id;tape=rolls[id].tape;uid=rolls[id].uid;
+ undoStack.length=0;
+ resetPending();recompute();render();save();}
+ $('#rNew').addEventListener('click',()=>{
+ save();
+ const id='r'+Date.now();
+ let n=1;while(Object.keys(rolls).some(k=>rolls[k].name==='Roll '+n))n++;
+ rolls[id]={name:'Roll '+n,tape:[],uid:1};
+ curRollId=id;tape=rolls[id].tape;uid=1;
+ undoStack.length=0;resetPending();recompute();render();save();
+ renderRolls();buzz();toast('New roll created');});
+function deleteRoll(id){
+ if(!rolls[id])return;
+ if(Object.keys(rolls).length<=1){toast('Keep at least one roll');return;}
+ const snap=rolls[id],wasCur=(id===curRollId);
+ delete rolls[id];
+ if(wasCur){
+  curRollId=Object.keys(rolls)[0];
+  tape=rolls[curRollId].tape;uid=rolls[curRollId].uid;
+  undoStack.length=0;resetPending();recompute();render();}
+ save();renderRolls();buzz();
+ toast('Deleted “'+snap.name+'”',true,function(){
+  rolls[id]=snap;
+  if(wasCur){curRollId=id;tape=snap.tape;uid=snap.uid;resetPending();recompute();render();}
+  save();renderRolls();buzz();toast('Roll restored');});}
+ $('#rollsBtn').addEventListener('click',openRolls);
+ $('#rCan').addEventListener('click',()=>{rmodal.classList.remove('open');buzz();});
+/* rename roll */
+function openRename(id){
+ renameId=id;rname.value=rolls[id].name;
+ rnmodal.classList.add('open');
+ setTimeout(()=>{rname.focus();rname.select();},60);}
+ $('#rnOk').addEventListener('click',()=>{
+ const t=rname.value.trim().slice(0,40);
+ rnmodal.classList.remove('open');
+ if(t&&rolls[renameId]){rolls[renameId].name=t;save();renderRolls();toast('Renamed');}
+ buzz();});
+ $('#rnCan').addEventListener('click',()=>{rnmodal.classList.remove('open');buzz();});
+rname.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#rnOk').click();}});
+/* paper color cycle */
+function applyPaper(){tapeEl.classList.toggle('paper-w',paper==='w');tapeEl.classList.toggle('paper-g',paper==='g');}
+ $('#paperBtn').addEventListener('click',()=>{
+ paper=paper===''?'w':paper==='w'?'g':'';
+ applyPaper();save();buzz();
+ toast('Paper: '+(paper==='w'?'white':paper==='g'?'green':'cream'));});
+/* decimal mode picker */
+function openMode(){
+ dmodal.querySelectorAll('[data-mode]').forEach(b=>{
+  b.textContent=(b.dataset.mode===mode?'✓  ':'')+b.dataset.label;});
+ dmodal.classList.add('open');
+ setTimeout(()=>{const cb=dmodal.querySelector('[data-mode="'+mode+'"]');(cb||$('#dCan')).focus();},60);
+ buzz();}
+function setMode(m){
+ if(!MODES.includes(m))return;
+ mode=m;$('#modeBtn').textContent=modeLabel(mode);
+ dmodal.classList.remove('open');render();save();buzz();
+ toast('Mode: '+modeLabel(mode));}
+ $('#modeBtn').addEventListener('click',openMode);
+dmodal.addEventListener('click',e=>{
+ const b=e.target.closest('[data-mode]');
+ if(b){setMode(b.dataset.mode);return;}
+ if(e.target===dmodal)dmodal.classList.remove('open');});
+ $('#dCan').addEventListener('click',()=>{dmodal.classList.remove('open');buzz();});
+/* forgiving normalizer for imports */
+const opMap={'%':'%','×':'×','*':'×','÷':'÷','/':'÷','−':'−','-':'−'};
+function normalizeTape(d){
+ const arr=Array.isArray(d)?d:(d&&Array.isArray(d.tape)?d.tape:null);
+ if(!arr)throw new Error('no tape');
+ const out=[];
+ for(const l of arr){
+  if(!l||typeof l!=='object')continue;
+  if(l.kind==='entry'){const v=Number(l.value);
+   if(isFinite(v)){
+    const note=(typeof l.note==='string'&&l.note.trim())?l.note.trim().slice(0,60):null;
+    out.push(note?{kind:'entry',value:v,note:note}:{kind:'entry',value:v});}}
+  else if(l.kind==='subtotal'||l.kind==='total'){const v=Number(l.value);if(isFinite(v))out.push({kind:l.kind,value:v});}
+  else if(l.kind==='operand'){const v=Number(l.value),op=opMap[l.op];
+   if(isFinite(v)&&op)out.push({kind:'operand',op,value:v});}
+  else if(l.kind==='nonadd'){out.push({kind:'nonadd',label:typeof l.label==='string'?l.label.slice(0,120):''});}
+ }
+ while(out.length&&out[out.length-1].kind==='operand')out.pop();
+ if(!out.length)throw new Error('no valid lines');
+ return out;}
+
+/* ---- storage ---- */
+/* all rolls under one key; legacy tenkeyTape migrated on first run */
+let storeWarned=false,saveT=null;
+function save(){try{
+ if(curRollId&&rolls[curRollId]){rolls[curRollId].tape=tape;rolls[curRollId].uid=uid;}
+ localStorage.setItem('tenkeyRolls',JSON.stringify({rolls,curRoll:curRollId,mode,soundOn,hapticsOn,fsAuto,paper}));
+}catch(e){
+ console.warn('10-Key: could not persist',e);
+ if(!storeWarned){storeWarned=true;toast('Storage error — changes not saved');}}}
+/* debounced save for hot paths (every posted line) */
+function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,400);}
+function flushSave(){if(saveT){clearTimeout(saveT);saveT=null;save();}}
+window.addEventListener('pagehide',flushSave);
+/* revive a saved tape: lenient validation — null on hopeless junk, [] for empty rolls.
+   Keeps NaN-poisoned/corrupt lines out of the app (they'd break every total). */
+function reviveTape(arr){
+ if(!Array.isArray(arr))return null;
+ if(!arr.length)return [];
+ try{return normalizeTape({tape:arr});}catch(e){return null;}}
+/* parse a persisted store into `rolls`; returns true if at least one usable roll */
+function ingestRolls(s){
+ rolls={};
+ if(!s||!s.rolls||typeof s.rolls!=='object')return false;
+ for(const k in s.rolls){
+  const r=s.rolls[k];
+  if(!r||typeof r!=='object')continue;
+  const t=reviveTape(r.tape);
+  if(t===null)continue;
+  let u=(typeof r.uid==='number'&&isFinite(r.uid)&&r.uid>=1)?Math.floor(r.uid):1;
+  t.forEach(l=>{l.id=u++;});
+  rolls[k]={name:(typeof r.name==='string'&&r.name)?r.name.slice(0,40):'Roll',tape:t,uid:u};
+ }
+ return Object.keys(rolls).length>0;}
+function load(){
+ let s=null,legacy=null;
+ try{s=JSON.parse(localStorage.getItem('tenkeyRolls')||'null');}catch(e){}
+ try{legacy=JSON.parse(localStorage.getItem('tenkeyTape')||'null');}catch(e){}
+ if(ingestRolls(s)){
+  /* stale/missing curRoll falls back to the first roll — never wipe data */
+  curRollId=(typeof s.curRoll==='string'&&rolls[s.curRoll])?s.curRoll:Object.keys(rolls)[0];
+  mode=MODES.includes(s.mode)?s.mode:'2';
+  soundOn=s.soundOn!==false;hapticsOn=s.hapticsOn!==false;fsAuto=s.fsAuto!==false;
+  paper=typeof s.paper==='string'?s.paper:'';
+ }else{
+  let t=[];
+  if(legacy&&Array.isArray(legacy.tape)){
+   const rt=reviveTape(legacy.tape);
+   if(rt)t=rt;
+   mode=MODES.includes(legacy.mode)?legacy.mode:'2';
+   soundOn=legacy.soundOn!==false;hapticsOn=legacy.hapticsOn!==false;fsAuto=legacy.fsAuto!==false;
+  }
+  let u=1;t.forEach(l=>{l.id=u++;});
+  curRollId='r'+Date.now();
+  rolls={};rolls[curRollId]={name:'Roll 1',tape:t,uid:u};
+ }
+ tape=rolls[curRollId].tape;uid=rolls[curRollId].uid;}
+/* another tab wrote to storage — pull in its state instead of clobbering it */
+window.addEventListener('storage',e=>{
+ if(e.key!=='tenkeyRolls')return;
+ let s=null;try{s=JSON.parse(e.newValue||'null');}catch(err){return;}
+ if(!ingestRolls(s))return; /* other tab cleared storage / wrote junk — keep ours */
+ curRollId=rolls[curRollId]?curRollId:Object.keys(rolls)[0];
+ mode=MODES.includes(s.mode)?s.mode:mode;
+ soundOn=s.soundOn!==false;hapticsOn=s.hapticsOn!==false;fsAuto=s.fsAuto!==false;
+ paper=typeof s.paper==='string'?s.paper:paper;
+ tape=rolls[curRollId].tape;uid=rolls[curRollId].uid;
+ undoStack.length=0;
+ resetPending();recompute();render();applyPaper();syncHeader();
+ toast('Synced — updated in another tab');});
+
+/* ---- PWA ---- */
+/* Canvas icon is only a FALLBACK for standalone-from-disk use; when hosted,
+   the real icon files linked in <head> take over and this is skipped. */
+function setupPWA(){try{
+ if(document.querySelector('link[rel="apple-touch-icon"]'))return;
+ const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d');
+ const r=96;
+ x.fillStyle='#262a31';
+ x.beginPath();
+ x.moveTo(r,0);x.arcTo(512,0,512,512,r);x.arcTo(512,512,0,512,r);x.arcTo(0,512,0,0,r);x.arcTo(0,0,512,0,r);
+ x.closePath();x.fill();
+ x.strokeStyle='#3d434e';x.lineWidth=14;x.stroke();
+ x.textAlign='center';x.textBaseline='middle';
+ x.fillStyle='#4ade80';x.font='700 250px Arial';x.fillText('=',256,175);
+ x.fillStyle='#f4f1ea';x.font='700 175px Arial';x.fillText('10',256,365);
+ const url=c.toDataURL('image/png');
+ const l=document.createElement('link');l.rel='apple-touch-icon';l.href=url;
+ document.head.appendChild(l);
+}catch(e){}}
+/* offline support — registers sw.js when hosted over HTTPS/localhost;
+   silently skipped for file:// so single-file usage keeps working */
+if('serviceWorker' in navigator&&
+   (location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
+ window.addEventListener('load',()=>{
+  try{navigator.serviceWorker.register('./sw.js').catch(()=>{});}catch(e){}});
+}
+/* install offer — Android & desktop Chromium fire beforeinstallprompt and we
+   surface the native prompt via the toast's INSTALL button.
+   iOS installs through Safari's Share → Add to Home Screen (no API exists). */
+let installEvt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+ e.preventDefault();installEvt=e;
+ toast('Install 10-Key as an app?',true,()=>{
+  if(!installEvt)return;
+  installEvt.prompt();
+  installEvt.userChoice.finally(()=>{installEvt=null;});
+ },'INSTALL');});
+window.addEventListener('appinstalled',()=>{installEvt=null;toast('10-Key installed ✓');});
+
+/* ---- events ---- */
+function act(a){
+ switch(a){
+  case '+':plusKey();break;   case '−':minusKey();break;
+  case '×':case '÷':case '%':opKey(a);break;
+  case 'S':doSubtotal();break;case 'T':doTotal();break;
+  case '#':doNonadd();break;  case 'C':ce();break;
+  case '⌫':back();break;      case '±':toggleSign();break;
+  default:digit(a);}
+ keySound(a);buzz();}
+/* keypad keys register on PRESS (pointerdown) — no wait-for-release, no
+   tap-delay path. preventDefault stops focus & ghost clicks so one press
+   can never fire twice; .press class guarantees the pressed look. */
+function pressKey(el,fn){
+ const down=e=>{
+  if(e.isPrimary===false)return;
+  if(e.button!==undefined&&e.button!==0)return;
+  e.preventDefault();
+  el.classList.add('press');
+  fn();};
+ const up=()=>el.classList.remove('press');
+ if(window.PointerEvent){
+  el.addEventListener('pointerdown',down);
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,up));
+ }else{
+  el.addEventListener('touchstart',e=>{e.preventDefault();el.classList.add('press');fn();},{passive:false});
+  el.addEventListener('touchend',up);el.addEventListener('touchcancel',up);
+  el.addEventListener('click',e=>{e.preventDefault();fn();}); /* desktop mouse */
+ }}
+document.querySelectorAll('.k').forEach(b=>pressKey(b,()=>act(b.dataset.a)));
+ sndBtn.addEventListener('click',()=>{soundOn=!soundOn;
+ sndBtn.textContent=soundOn?'🔊':'🔇';
+ sndBtn.setAttribute('aria-label',soundOn?'Sound on':'Sound off');save();if(soundOn)blip(1200,.05,.05);buzz();});
+ hapBtn.addEventListener('click',()=>{hapticsOn=!hapticsOn;
+ hapBtn.textContent=hapticsOn?'📳':'📵';
+ hapBtn.setAttribute('aria-label',hapticsOn?'Haptics on':'Haptics off');save();
+ if(hapticsOn)buzz();});
+ $('#copyBtn').addEventListener('click',()=>{copyTape();buzz();});
+ $('#saveBtn').addEventListener('click',()=>{buzz();openModal();});
+window.addEventListener('keydown',e=>{
+ /* any open dialog captures the keyboard; Escape closes all */
+ if(ALLMODALS.some(m=>m.classList.contains('open'))){
+  if(e.key==='Escape'){ALLMODALS.forEach(m=>m.classList.remove('open'));e.preventDefault();}
+  return;}
+ if(e.ctrlKey||e.metaKey||e.altKey)return; /* don't hijack browser shortcuts */
+ const k=e.key;
+ /* let a focused button (header) handle its own Enter/Space */
+ const ae=document.activeElement;
+ if(ae&&ae.tagName==='BUTTON'&&(k==='Enter'||k===' '))return;
+ let a=null;
+ if(k==='?'||k==='h'||k==='H'){openHelp();e.preventDefault();return;}
+ if(k>='0'&&k<='9')a=k;
+ else if(k==='.')a='.';
+ else if(k==='+'||k==='Enter'||k==='=')a='+';
+ else if(k===' ')a='+';
+ else if(k==='-')a='−';
+ else if(k==='*'||k==='x'||k==='X')a='×';
+ else if(k==='/')a='÷';
+ else if(k==='%')a='%';
+ else if(k==='s'||k==='S')a='S';
+ else if(k==='t'||k==='T')a='T';
+ else if(k==='c'||k==='C')a='C';
+ else if(k==='#')a='#';
+ else if(k==='Backspace')a='⌫';
+ else if(k==='Escape')a='C';
+ else if(k==='n'||k==='N')a='±';
+ else return;
+ /* ignore key-repeat on destructive/print keys — holding C/S/T/# must not spam */
+ if(e.repeat&&(a==='C'||a==='S'||a==='T'||a==='#'))return;
+ act(a);e.preventDefault();});
+/* keep Tab cycling inside the open dialog */
+document.addEventListener('keydown',e=>{
+ if(e.key!=='Tab')return;
+ const m=ALLMODALS.find(x=>x.classList.contains('open'));
+ if(!m)return;
+ const els=m.querySelectorAll('button,input');
+ if(!els.length)return;
+ const first=els[0],last=els[els.length-1],ae=document.activeElement;
+ if(e.shiftKey&&(ae===first||!m.contains(ae))){e.preventDefault();last.focus();}
+ else if(!e.shiftKey&&(ae===last||!m.contains(ae))){e.preventDefault();first.focus();}
+});
+fname.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#mSave').click();}});
+
+/* ---- init ---- */
+function setDateLine(){try{
+ $('#dateLine').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',year:'numeric',month:'short',day:'numeric'});
+}catch(e){}}
+/* restore header buttons to persisted settings */
+function syncHeader(){$('#modeBtn').textContent=modeLabel(mode);
+ sndBtn.textContent=soundOn?'🔊':'🔇';hapBtn.textContent=hapticsOn?'📳':'📵';}
+setDateLine();load();applyPaper();syncHeader();recompute();render();setupPWA();
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden)flushSave();else setDateLine();});
+})();
+</script>
+</body>
+</html>

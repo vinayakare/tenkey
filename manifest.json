@@ -1,0 +1,17 @@
+{
+  "name": "10-Key Adding Machine",
+  "short_name": "10-Key",
+  "description": "A classic adding-machine calculator with a paper tape roll, notes, rolls and export.",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0e11",
+  "theme_color": "#17181c",
+  "icons": [
+    { "src": "icon-192.png",          "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png",          "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
