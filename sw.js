@@ -1,6 +1,6 @@
 /* 10-Key service worker — cache-first shell with network-first navigation.
    Bump CACHE (v1 → v2) whenever you change files to push updates to users. */
-const CACHE = 'tenkey-v1';
+const CACHE = 'tenkey-v2';
 const ASSETS = ['./', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png', './icon-180.png', './icon-maskable-512.png'];
 

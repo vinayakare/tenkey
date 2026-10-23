@@ -82,6 +82,8 @@ border-radius:10px;padding:2px 9px;max-width:100%;cursor:pointer;overflow:hidden
 #cur{font-size:clamp(24px,4.4vh,34px);font-size:clamp(24px,4.4dvh,34px);font-weight:600;color:#f3efe2;
 font-variant-numeric:tabular-nums;line-height:1.2;min-height:1.25em}
 #cur.err{color:#ff7b66}
+/* a finished T held on the display (cleared by C / a new entry) */
+#cur.held{color:#7ec8ff}
 #tot{font-size:clamp(11px,1.6vh,12.5px);font-size:clamp(11px,1.6dvh,12.5px);color:#a9a496;letter-spacing:.1em;
 padding:2px 0 7px;font-variant-numeric:tabular-nums}
 /* KEYPAD — fixed share of the viewport (clamp 240–400px) so the roll lands at
@@ -150,8 +152,9 @@ box-shadow:0 2px 0 #b6b1a2,0 3px 6px rgba(0,0,0,.35)}
  .k:active,.k.press{transform:translateY(2px);box-shadow:0 0 0 #b6b1a2}
 }
 #toast{position:fixed;top:calc(env(safe-area-inset-top) + 52px);left:50%;transform:translateX(-50%);
-background:#000c;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:9;
+background:#000c;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:40;
 display:flex;align-items:center}
+/* z-index 40 — above the modals (20) so toasts stay visible over open dialogs */
 #toast.show{opacity:1;pointer-events:auto}
 /* toast hosts an action button (UNDO / INSTALL / …) */
 #toastUndo{display:none;margin-left:10px;background:none;border:0;color:#7ec8ff;font-weight:700;font-size:12.5px;cursor:pointer;padding:0;font-family:inherit}
@@ -161,7 +164,7 @@ display:flex;align-items:center}
    so the on-screen keyboard (bottom ~40% of the screen) can never cover them.
    (Desktop keeps its centered placement.) */
 @media (pointer:coarse){
- #modal.open,#nmodal.open,#emodal.open,#rnmodal.open,#rmodal.open{align-items:flex-start;overflow-y:auto;
+ #modal.open,#nmodal.open,#emodal.open,#rnmodal.open,#delmodal.open,#rmodal.open{align-items:flex-start;overflow-y:auto;
   padding-top:calc(10px + env(safe-area-inset-top))}}
 /* explicit text color on .modal — force-dark heuristics behave best when both
    background and text color are stated on every container */
@@ -232,7 +235,7 @@ padding:6px 8px;margin:6px 0;white-space:pre-wrap}
     <div class="cap">★ 10-KEY ★</div>
     <div class="cap2" id="dateLine"></div>
     <div id="lines"></div>
-    <div class="hint">Tap an entry twice to remove it · hold a line to edit · empty + or − repeats the last number · % then + or − posts it · # with no number stamps date &amp; time · ✎ attaches or prints a label · C clears the transaction — double-press empties the roll</div>
+    <div class="hint">Tap a line twice to remove it · hold a line to edit · empty + or − repeats the last number · % then + or − posts it · # with no number stamps date &amp; time · ✎ attaches or prints a label · C clears the transaction — double-press empties the roll</div>
     <div id="stot">T 0.00</div>
   </div>
   <div id="display">
@@ -339,6 +342,15 @@ padding:6px 8px;margin:6px 0;white-space:pre-wrap}
     <button class="mbtn can" id="rnCan">✕  Cancel</button>
   </div>
 </div>
+<!-- delete roll confirmation -->
+<div id="delmodal" class="modalwrap">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Confirm delete">
+    <div class="mtitle">Delete roll</div>
+    <div class="msub" id="delMsg"></div>
+    <button class="mbtn del" id="delYes">Yes — delete</button>
+    <button class="mbtn can" id="delNo">No — keep it</button>
+  </div>
+</div>
 <!-- decimal mode picker -->
 <div id="dmodal" class="modalwrap">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Decimal mode">
@@ -358,7 +370,7 @@ padding:6px 8px;margin:6px 0;white-space:pre-wrap}
     <div class="mtitle">How to use the 10-Key</div>
     <div class="hbody">
       <h3>The basics</h3>
-      <p>Type an amount, then <b>+ =</b> to add it or <b>−</b> to subtract — every press prints on the paper roll. The line under the display is the running <b>TOTAL</b> since the last T. <b>S</b> prints a dashed subtotal; <b>T</b> prints the grand total (double line) and starts a new section. Both print the <b>item count</b> since the last T.</p>
+      <p>Type an amount, then <b>+ =</b> to add it or <b>−</b> to subtract — every press prints on the paper roll. The line under the display is the running <b>TOTAL</b> since the last T. <b>S</b> prints a dashed subtotal; <b>T</b> prints the grand total (double line) and starts a new section. Both print the <b>item count</b> since the last T. After T, the total stays on the display until you press <b>C</b> or start a new calculation.</p>
       <p>Scroll up a long roll and a small capsule appears at the bottom-left showing the roll’s <b>last printed Total</b> (or the running <b>Σ</b> if no T has been printed yet).</p>
       <h3>The keys</h3>
       <table>
@@ -367,8 +379,8 @@ padding:6px 8px;margin:6px 0;white-space:pre-wrap}
         <tr><td class="kk">−</td><td>Subtract (red key). Empty too — repeats the last amount</td></tr>
         <tr><td class="kk">× · ÷</td><td>Multiply / divide: type A, ×, type B, then + or − posts the result · chains (200 × 30 ÷ 5 +) keep one pending value</td></tr>
         <tr><td class="kk">%</td><td>Percent of the total (or of a pending ×/÷). Held until + or − posts it</td></tr>
-        <tr><td class="kk">S · T</td><td>Subtotal · grand total (with item counts)</td></tr>
-        <tr><td class="kk">C</td><td>Start a <b>new transaction</b> — clears the running total, typed digits, pending ×/÷, held % and note · press <b>twice quickly</b> to empty the whole roll (other rolls are never affected)</td></tr>
+        <tr><td class="kk">S · T</td><td>Subtotal · grand total (with item counts) · T holds the total on the display until C or a new entry</td></tr>
+        <tr><td class="kk">C</td><td>Start a <b>new transaction</b> — clears the running total, typed digits, pending ×/÷, held %, note and any held total on the display · press <b>twice quickly</b> to empty the whole roll (other rolls are never affected)</td></tr>
         <tr><td class="kk">⌫ · ±</td><td>Delete last digit · flip sign</td></tr>
         <tr><td class="kk">#</td><td>With digits: reference label · empty: date &amp; time stamp</td></tr>
         <tr><td class="kk">Hold a line</td><td>Edit its amount / note</td></tr>
@@ -381,7 +393,7 @@ padding:6px 8px;margin:6px 0;white-space:pre-wrap}
       <h3>Editing the tape</h3>
       <p><b>Hold</b> an amount line (~½ second) to edit its amount or note. Tap-tap still removes a line. Dotted dividers and S/T lines are part of the paper itself — remove them with <b>UNDO</b>, <b>C</b> or double-<b>C</b>. Every removal, edit, merge, replace, transaction clear (C), roll empty (double-C) and roll delete shows an <b>UNDO</b> button in the toast.</p>
       <h3>Rolls &amp; data</h3>
-      <p><b>🗂</b> manages <b>named rolls</b> — switch, create (➕), rename, delete, and <b>🔍 search</b>: the box matches roll names, notes, # references and amounts across all rolls, showing hit counts and snippets. Each row shows the roll’s <b>last total</b> (or its open running total). <b>⧉</b> copies the tape as text; <b>💾</b> opens <b>Save / export</b>: <b>Save as JSON</b> (backup/restore), <b>Export CSV</b> (spreadsheets — one row per line, signed amounts, op symbol on every line), or <b>Import</b> (Merge appends / Replace clears first). <b>C</b> starts a new transaction; <b>double-C</b> empties the current roll — saved rolls are never affected.</p>
+      <p><b>🗂</b> manages <b>named rolls</b> — switch, create (➕), rename, delete (with a Yes/No confirmation), and <b>🔍 search</b>: the box matches roll names, notes, # references and amounts across all rolls, showing hit counts and snippets. Each row shows the roll’s <b>last total</b> (or its open running total). <b>⧉</b> copies the tape as text; <b>💾</b> opens <b>Save / export</b>: <b>Save as JSON</b> (backup/restore), <b>Export CSV</b> (spreadsheets — one row per line, signed amounts, op symbol on every line), or <b>Import</b> (Merge appends / Replace clears first). <b>C</b> starts a new transaction; <b>double-C</b> empties the current roll — saved rolls are never affected.</p>
       <h3>Header buttons</h3>
       <table>
         <tr><td class="kk">0dp · 2dp · 3dp<br>FLT · ADD</td><td>Decimal mode picker (✓ marks current)</td></tr>
@@ -432,6 +444,7 @@ let pendOp=null,pendVal=0,pendLineId=null; /* pending ×/÷ operation */
 let pendPct=null; /* held % amount {amt,lineId} — posted by the next + or − */
 let fsAuto=true; /* auto-fullscreen on first tap (touch devices only) */
 let pendNote=''; /* note waiting to be attached to the next posted amount */
+let totShownId=null; /* finished T stays on the display until C / a new entry */
 /* named rolls + paper + undo stack */
 let rolls={},curRollId=null,undoStack=[],paper='';
 
@@ -527,7 +540,7 @@ function doUndo(){
  if(!s){toast('Nothing to undo');return;}
  tape=s.tape;uid=s.uid;
  if(rolls[s.roll]){rolls[s.roll].tape=tape;rolls[s.roll].uid=uid;}
- pendOp=null;pendVal=0;pendLineId=null;pendPct=null;
+ pendOp=null;pendVal=0;pendLineId=null;pendPct=null;totShownId=null;
  armedId=null;clearTimeout(armedTimer);
  recompute();render();save();buzz();toast('Undone');}
 
@@ -535,6 +548,7 @@ function doUndo(){
 function flash(){curEl.classList.add('err');setTimeout(()=>curEl.classList.remove('err'),260);blip(240,.09,.05,'sawtooth');}
 function digitLen(){return input.replace('.','').length;}
 function digit(d){
+ totShownId=null; /* a new entry starts — the held total leaves the display */
  if(d==='.'){if(input.indexOf('.')>-1)return flash();input=input===''?'0.':input+'.';}
  else if(d==='00'){if(input===''||input==='0')return flash();if(digitLen()>=9)return flash();input+='00';}
  else{if(digitLen()>=10)return flash();input=(input==='0')?d:input+d;}
@@ -630,7 +644,9 @@ function doSubtotal(){pendPct=null;negPending=false; /* don't leak sign into nex
 function doTotal(){pendPct=null;negPending=false; /* don't leak sign into next entry */
  if(pendOp&&tryFinish(pendOp,1)===null)return;
  if(!curEntries().length)return flash();
- tape.push({id:uid++,kind:'total',value:0});afterChange();}
+ const l={id:uid++,kind:'total',value:0};
+ tape.push(l);totShownId=l.id; /* hold the total on the display until C / a new entry */
+ afterChange();}
 /* # after digits prints them as a reference label;
    # with no digits stamps the current date & time */
 function stamp(){
@@ -654,7 +670,10 @@ function ce(){
  let cut=tape.length;
  for(let i=tape.length-1;i>=0;i--){if(tape[i].kind==='total'){cut=i+1;break;}}
  const hasOpen=cut<tape.length;
- if(!input.length&&!negPending&&!pendOp&&!pendPct&&!pendNote&&!hasOpen){renderDisp();return;}
+ if(!input.length&&!negPending&&!pendOp&&!pendPct&&!pendNote&&!hasOpen){
+  if(totShownId!=null){totShownId=null;renderDisp();toast('Total cleared');} /* C clears a held total */
+  return;}
+ totShownId=null;
  pushUndo();
  input='';negPending=false;
  if(pendOp){pendOp=null;pendVal=0;pendLineId=null;}
@@ -672,6 +691,7 @@ function clearRoll(){
  toast('Roll emptied',true);}
 function toggleSign(){
  if(pendPct&&!input){flash();return;} /* a held % can't be negated — visible cue instead */
+ totShownId=null;
  negPending=!negPending;renderDisp();}
 function back(){if(!input.length){negPending=false;renderDisp();return;}input=input.slice(0,-1);renderDisp();}
 /* n = number of lines purely APPENDED to the tape since the last render —
@@ -682,7 +702,8 @@ function afterChange(n){recompute();render(n);saveSoon();}
 function resetPending(){input='';negPending=false;
  pendOp=null;pendVal=0;pendLineId=null;pendPct=null;
  pendNote='';noteTagUpd();
- armedId=null;clearTimeout(armedTimer);}
+ armedId=null;clearTimeout(armedTimer);
+ totShownId=null;}
 
 /* ---- render ---- */
 /* make a tape line focusable & keyboard-activatable (Enter/Space = tap) */
@@ -726,8 +747,17 @@ function lineEl(l,c){
  }
  if(l.id===armedId)d.classList.add('warn');
  return d;}
+/* the finished T held on the display — looked up by id so edits/undo that
+   recompute the tape keep it correct; a removed T falls back automatically */
+function shownTotal(){
+ if(totShownId==null)return null;
+ for(let i=tape.length-1;i>=0;i--){const l=tape[i];
+  if(l.id===totShownId)return l.kind==='total'?l.value:null;}
+ return null;}
 /* display-only update — digit/backspace/± don't rebuild the whole tape DOM */
 function renderDisp(){
+ const st=shownTotal();
+ curEl.classList.toggle('held',st!=null&&input===''&&!pendOp&&!pendPct&&!negPending);
  curEl.textContent=pendOp&&!input
   ?(pendVal<0?'−':'')+fmt(Math.abs(pendVal))+' '+pendOp+(negPending?' −':'')
   :pendPct&&!input
@@ -736,6 +766,7 @@ function renderDisp(){
   ?(mode==='A'&&input.indexOf('.')<0
      ?(negPending?'−':'')+fmt(parseInt(input,10)/100)
      :(negPending?'−':'')+input)
+  :st!=null?sfmt(st)
   :negPending?'−':sfmt(runningTotal());
  totEl.textContent='TOTAL  '+sfmt(runningTotal());}
 function render(n){
@@ -817,8 +848,10 @@ function copyTape(){const txt=tapeText();
 
 /* ---- dialogs ---- */
 const modal=$('#modal'),mmodal=$('#mmodal'),nmodal=$('#nmodal'),hmodal=$('#hmodal'),dmodal=$('#dmodal'),
-      rmodal=$('#rmodal'),emodal=$('#emodal'),rnmodal=$('#rnmodal');
-const ALLMODALS=[modal,mmodal,nmodal,hmodal,dmodal,rmodal,emodal,rnmodal];
+      rmodal=$('#rmodal'),emodal=$('#emodal'),rnmodal=$('#rnmodal'),delmodal=$('#delmodal');
+/* stacked dialogs (rename / delete-confirm open above the rolls manager) come
+   BEFORE rmodal so the Tab trap always uses the topmost open dialog */
+const ALLMODALS=[modal,mmodal,nmodal,hmodal,dmodal,emodal,rnmodal,delmodal,rmodal];
 const fname=$('#fname'),fileIn=$('#fileIn'),ntext=$('#ntext'),eAmt=$('#eAmt'),eNote=$('#eNote'),rname=$('#rname');
 const noteTag=$('#noteTag'),noteTxt=$('#noteTxt');
 let impLines=null,impParsed=null,impName='',editId=null,renameId=null;
@@ -905,7 +938,9 @@ fileIn.addEventListener('change',()=>{
  r.onload=()=>{
   try{
    const d=JSON.parse(r.result);
-   impLines=normalizeTape(d); /* validate first, then ask merge/replace */
+   const arr=Array.isArray(d)?d:(d&&Array.isArray(d.tape)?d.tape:null);
+   if(!arr)throw new Error('no tape');
+   impLines=arr.length?normalizeTape(d):[]; /* empty backups are valid */
    impParsed=d;
    impName=(f.name||'tape.json').replace(/\.json$/i,'');
    modal.classList.remove('open');
@@ -940,6 +975,8 @@ function openEdit(id){
  const l=tape.find(x=>x.id===id);
  if(!l||l.kind!=='entry')return;
  editId=id;
+ armedId=null;clearTimeout(armedTimer); /* don't leave the line armed behind the dialog */
+ document.querySelectorAll('.ln.warn').forEach(x=>x.classList.remove('warn'));
  eAmt.value=String(l.value);
  eNote.value=l.note||'';
  emodal.classList.add('open');
@@ -947,7 +984,13 @@ function openEdit(id){
  $('#eOk').addEventListener('click',()=>{
  const l=tape.find(x=>x.id===editId);
  if(!l){emodal.classList.remove('open');return;}
- const num=parseFloat(eAmt.value.replace(',','.'));
+ /* accept both decimal conventions: when . and , are both present, the
+    rightmost one is the decimal point (1,234.56 and 1.234,56 both work) */
+ let s=eAmt.value.trim().replace(/\s/g,'');
+ const li=s.lastIndexOf('.'),lc=s.lastIndexOf(',');
+ if(li>-1&&lc>-1){if(lc>li)s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');}
+ else if(lc>-1)s=s.replace(',','.');
+ const num=parseFloat(s);
  if(!isFinite(num)){toast('Enter a valid amount');return;}
  pushUndo();
  l.value=round(num);
@@ -1020,9 +1063,18 @@ function switchRoll(id){
  curRollId=id;tape=rolls[id].tape;uid=1;
  undoStack.length=0;resetPending();recompute();render();save();
  renderRolls();buzz();toast('New roll created');});
+/* roll deletion — confirm first; the actual delete stays undoable via toast */
+let delPendingId=null;
 function deleteRoll(id){
  if(!rolls[id])return;
  if(Object.keys(rolls).length<=1){toast('Keep at least one roll');return;}
+ delPendingId=id;
+ $('#delMsg').textContent='Delete “'+rolls[id].name+'” and its whole tape ('
+  +rolls[id].tape.length+' lines)? You can undo right after.';
+ delmodal.classList.add('open');
+ setTimeout(()=>$('#delYes').focus(),60);
+ buzz();}
+function doDeleteRoll(id){
  const snap=rolls[id],wasCur=(id===curRollId);
  delete rolls[id];
  if(wasCur){
@@ -1034,6 +1086,11 @@ function deleteRoll(id){
   rolls[id]=snap;
   if(wasCur){curRollId=id;tape=snap.tape;uid=snap.uid;resetPending();recompute();render();}
   save();renderRolls();buzz();toast('Roll restored');});}
+ $('#delYes').addEventListener('click',()=>{
+ const id=delPendingId;delPendingId=null;
+ delmodal.classList.remove('open');
+ if(id&&rolls[id])doDeleteRoll(id);});
+ $('#delNo').addEventListener('click',()=>{delPendingId=null;delmodal.classList.remove('open');buzz();});
  $('#rollsBtn').addEventListener('click',openRolls);
  $('#rCan').addEventListener('click',()=>{rmodal.classList.remove('open');buzz();});
 /* rename roll */
@@ -1148,7 +1205,8 @@ function load(){
   curRollId='r'+Date.now();
   rolls={};rolls[curRollId]={name:'Roll 1',tape:t,uid:u};
  }
- tape=rolls[curRollId].tape;uid=rolls[curRollId].uid;}
+ tape=rolls[curRollId].tape;uid=rolls[curRollId].uid;
+ try{localStorage.removeItem('tenkeyTape');}catch(e){} /* legacy key migrated — clean up */}
 /* another tab wrote to storage — pull in its state instead of clobbering it */
 window.addEventListener('storage',e=>{
  if(e.key!=='tenkeyRolls')return;
@@ -1164,10 +1222,10 @@ window.addEventListener('storage',e=>{
  toast('Synced — updated in another tab');});
 
 /* ---- PWA ---- */
-/* Canvas icon is only a FALLBACK for standalone-from-disk use; when hosted,
-   the real icon files linked in <head> take over and this is skipped. */
+/* Canvas icon is only a FALLBACK for running from disk (file://), where the
+   <head> icon links 404; when hosted, the real icon files take over. */
 function setupPWA(){try{
- if(document.querySelector('link[rel="apple-touch-icon"]'))return;
+ if(location.protocol!=='file:')return;
  const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d');
  const r=96;
  x.fillStyle='#262a31';
@@ -1269,8 +1327,8 @@ window.addEventListener('keydown',e=>{
  else if(k==='Escape')a='C';
  else if(k==='n'||k==='N')a='±';
  else return;
- /* ignore key-repeat on destructive/print keys — holding C/S/T/# must not spam */
- if(e.repeat&&(a==='C'||a==='S'||a==='T'||a==='#'))return;
+ /* key-repeat: only digits, • and ⌫ may auto-repeat — a held +/− /C/S/T/# would spam */
+ if(e.repeat&&a!=='⌫'&&a!=='.'&&!(a>='0'&&a<='9'))return;
  act(a);e.preventDefault();});
 /* keep Tab cycling inside the open dialog */
 document.addEventListener('keydown',e=>{
@@ -1289,9 +1347,11 @@ fname.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#
 function setDateLine(){try{
  $('#dateLine').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',year:'numeric',month:'short',day:'numeric'});
 }catch(e){}}
-/* restore header buttons to persisted settings */
+/* restore header buttons to persisted settings (labels included) */
 function syncHeader(){$('#modeBtn').textContent=modeLabel(mode);
- sndBtn.textContent=soundOn?'🔊':'🔇';hapBtn.textContent=hapticsOn?'📳':'📵';}
+ sndBtn.textContent=soundOn?'🔊':'🔇';hapBtn.textContent=hapticsOn?'📳':'📵';
+ sndBtn.setAttribute('aria-label',soundOn?'Sound on':'Sound off');
+ hapBtn.setAttribute('aria-label',hapticsOn?'Haptics on':'Haptics off');}
 setDateLine();load();applyPaper();syncHeader();recompute();render();setupPWA();
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden)flushSave();else setDateLine();});
